@@ -8,7 +8,6 @@ import {
   TextInput,
   useColorScheme,
   Platform,
-  Alert,
   KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,10 +16,11 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useVolleyball, Game } from '@/lib/volleyball-context';
 
-function GameScoreCard({ game, teams, onSubmit }: {
+function GameScoreCard({ game, teams, onSubmit, round }: {
   game: Game;
   teams: any[];
-  onSubmit: (gameId: string, s1: number, s2: number) => void;
+  onSubmit: (gameId: string, s1: number, s2: number, round: 'roundRobin' | 'semifinal' | 'final') => void;
+  round: 'roundRobin' | 'semifinal' | 'final';
 }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -41,18 +41,14 @@ function GameScoreCard({ game, teams, onSubmit }: {
       setError('Enter valid scores');
       return;
     }
-
     if (s1 < 0 || s2 < 0) {
       setError('Scores must be positive');
       return;
     }
-
-    const maxScore = Math.max(s1, s2);
-    if (maxScore < 21) {
+    if (Math.max(s1, s2) < 21) {
       setError('Winner must reach at least 21');
       return;
     }
-
     if (s1 === s2) {
       setError('Scores cannot be tied');
       return;
@@ -60,7 +56,7 @@ function GameScoreCard({ game, teams, onSubmit }: {
 
     setError('');
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onSubmit(game.id, s1, s2);
+    onSubmit(game.id, s1, s2, round);
   };
 
   if (game.completed) {
@@ -72,7 +68,7 @@ function GameScoreCard({ game, teams, onSubmit }: {
           <Text style={[styles.completedText, { color: theme.success }]}>Final</Text>
         </View>
         <View style={styles.matchupRow}>
-          <View style={[styles.teamScoreCol, t1Won && styles.winnerCol]}>
+          <View style={styles.teamScoreCol}>
             <Text style={[styles.matchTeamName, { color: t1Won ? theme.tint : theme.textSecondary }]} numberOfLines={1}>
               {team1?.name ?? '?'}
             </Text>
@@ -81,7 +77,7 @@ function GameScoreCard({ game, teams, onSubmit }: {
             </Text>
           </View>
           <Text style={[styles.vs, { color: theme.textSecondary }]}>-</Text>
-          <View style={[styles.teamScoreCol, !t1Won && styles.winnerCol]}>
+          <View style={styles.teamScoreCol}>
             <Text style={[styles.matchTeamName, { color: !t1Won ? theme.tint : theme.textSecondary }]} numberOfLines={1}>
               {team2?.name ?? '?'}
             </Text>
@@ -140,6 +136,39 @@ function GameScoreCard({ game, teams, onSubmit }: {
   );
 }
 
+function RoundSection({ title, subtitle, games, teams, onSubmit, round, accentColor }: {
+  title: string;
+  subtitle?: string;
+  games: Game[];
+  teams: any[];
+  onSubmit: (gameId: string, s1: number, s2: number, round: 'roundRobin' | 'semifinal' | 'final') => void;
+  round: 'roundRobin' | 'semifinal' | 'final';
+  accentColor: string;
+}) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const theme = isDark ? Colors.dark : Colors.light;
+
+  if (games.length === 0) return null;
+
+  return (
+    <View style={styles.roundSection}>
+      <View style={[styles.roundHeader, { borderLeftColor: accentColor }]}>
+        <Text style={[styles.roundTitle, { color: theme.text }]}>{title}</Text>
+        {subtitle && <Text style={[styles.roundSubtitle, { color: theme.textSecondary }]}>{subtitle}</Text>}
+      </View>
+      {games.map((game, i) => (
+        <View key={game.id}>
+          <Text style={[styles.gameLabel, { color: theme.textSecondary }]}>
+            {game.label ?? `Game ${i + 1}`}
+          </Text>
+          <GameScoreCard game={game} teams={teams} onSubmit={onSubmit} round={round} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function ScoresScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -161,8 +190,21 @@ export default function ScoresScreen() {
     );
   }
 
-  const completedCount = currentWeek.games.filter(g => g.completed).length;
-  const totalGames = currentWeek.games.length;
+  const rrCompleted = currentWeek.games.filter(g => g.completed).length;
+  const rrTotal = currentWeek.games.length;
+  const semiCompleted = currentWeek.semifinalGames.filter(g => g.completed).length;
+  const semiTotal = currentWeek.semifinalGames.length;
+  const finalCompleted = currentWeek.finalGames.filter(g => g.completed).length;
+  const finalTotal = currentWeek.finalGames.length;
+  const totalGames = rrTotal + semiTotal + finalTotal;
+  const totalCompleted = rrCompleted + semiCompleted + finalCompleted;
+
+  const phaseLabel = {
+    roundRobin: 'Round Robin',
+    semifinals: 'Semifinals',
+    finals: 'Finals',
+    complete: 'Week Complete',
+  }[currentWeek.phase];
 
   return (
     <KeyboardAvoidingView
@@ -178,32 +220,64 @@ export default function ScoresScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={[styles.title, { color: theme.text }]}>Enter Scores</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-          Week {currentWeek.weekNumber}
-        </Text>
+        <View style={styles.metaRow}>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+            Week {currentWeek.weekNumber}
+          </Text>
+          <View style={[styles.phasePill, { backgroundColor: theme.tint + '20' }]}>
+            <Text style={[styles.phaseText, { color: theme.tint }]}>{phaseLabel}</Text>
+          </View>
+        </View>
 
         <View style={[styles.progressBar, { backgroundColor: theme.border }]}>
-          <View style={[styles.progressFill, { backgroundColor: theme.tint, width: `${(completedCount / totalGames) * 100}%` as any }]} />
+          <View style={[styles.progressFill, { backgroundColor: theme.tint, width: `${totalGames > 0 ? (totalCompleted / totalGames) * 100 : 0}%` as any }]} />
         </View>
         <Text style={[styles.progressText, { color: theme.textSecondary }]}>
-          {completedCount} of {totalGames} games completed
+          {totalCompleted} of {totalGames} games completed
         </Text>
 
-        {currentWeek.allGamesCompleted && (
+        {currentWeek.phase === 'complete' && (
           <View style={[styles.allDoneBanner, { backgroundColor: theme.success + '20', borderColor: theme.success }]}>
             <Ionicons name="trophy" size={20} color={theme.success} />
-            <Text style={[styles.allDoneText, { color: theme.success }]}>All games complete! Check rankings on the Teams tab.</Text>
+            <Text style={[styles.allDoneText, { color: theme.success }]}>
+              Week complete! Generate a new week from the Teams tab.
+            </Text>
           </View>
         )}
 
-        <View style={styles.gamesContainer}>
-          {currentWeek.games.map((game, i) => (
-            <View key={game.id}>
-              <Text style={[styles.gameLabel, { color: theme.textSecondary }]}>Game {i + 1}</Text>
-              <GameScoreCard game={game} teams={currentWeek.teams} onSubmit={submitScore} />
-            </View>
-          ))}
-        </View>
+        <RoundSection
+          title="Round Robin"
+          subtitle="All teams play each other"
+          games={currentWeek.games}
+          teams={currentWeek.teams}
+          onSubmit={submitScore}
+          round="roundRobin"
+          accentColor={theme.tint}
+        />
+
+        {currentWeek.semifinalGames.length > 0 && (
+          <RoundSection
+            title="Semifinals"
+            subtitle="#1 vs #4 and #2 vs #3"
+            games={currentWeek.semifinalGames}
+            teams={currentWeek.teams}
+            onSubmit={submitScore}
+            round="semifinal"
+            accentColor={theme.setter}
+          />
+        )}
+
+        {currentWeek.finalGames.length > 0 && (
+          <RoundSection
+            title="Finals"
+            subtitle="Championship & 3rd Place"
+            games={currentWeek.finalGames}
+            teams={currentWeek.teams}
+            onSubmit={submitScore}
+            round="final"
+            accentColor={theme.success}
+          />
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -217,7 +291,10 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 15, fontFamily: 'Inter_400Regular', textAlign: 'center' },
   content: { paddingHorizontal: 16 },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', marginBottom: 4 },
-  subtitle: { fontSize: 14, fontFamily: 'Inter_400Regular', marginBottom: 16 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  subtitle: { fontSize: 14, fontFamily: 'Inter_400Regular' },
+  phasePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  phaseText: { fontSize: 12, fontFamily: 'Inter_700Bold' },
   progressBar: { height: 6, borderRadius: 3, overflow: 'hidden', marginBottom: 6 },
   progressFill: { height: '100%', borderRadius: 3 },
   progressText: { fontSize: 13, fontFamily: 'Inter_400Regular', marginBottom: 20 },
@@ -231,12 +308,14 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   allDoneText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', flex: 1 },
-  gamesContainer: { gap: 16 },
+  roundSection: { marginBottom: 28 },
+  roundHeader: { borderLeftWidth: 4, paddingLeft: 12, marginBottom: 16 },
+  roundTitle: { fontSize: 20, fontFamily: 'Inter_700Bold' },
+  roundSubtitle: { fontSize: 13, fontFamily: 'Inter_400Regular', marginTop: 2 },
   gameLabel: { fontSize: 13, fontFamily: 'Inter_600SemiBold', marginBottom: 6, textTransform: 'uppercase' as const },
-  gameCard: { borderRadius: 14, borderWidth: 1, padding: 16 },
+  gameCard: { borderRadius: 14, borderWidth: 1, padding: 16, marginBottom: 12 },
   matchupRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   teamScoreCol: { flex: 1, alignItems: 'center', gap: 8 },
-  winnerCol: {},
   matchTeamName: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   vs: { fontSize: 14, fontFamily: 'Inter_700Bold', marginHorizontal: 12 },
   scoreInput: {
