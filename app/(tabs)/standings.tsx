@@ -54,12 +54,12 @@ export default function StandingsScreen() {
 
   const handleReset = () => {
     Alert.alert(
-      'Reset Season',
-      'This will clear all wins, losses, and team data. Are you sure?',
+      'Erase All Data?',
+      'This will permanently erase all season standings, current teams, scores, and week history. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset',
+          text: 'Erase Everything',
           style: 'destructive',
           onPress: () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);

@@ -67,19 +67,25 @@ function WeekCard({ entry }: { entry: WeekHistoryEntry }) {
 
       {!expanded && (
         <View style={styles.weekSummary}>
-          {entry.rankings.slice(0, 4).map((r, i) => (
-            <View key={i} style={styles.summaryRow}>
-              <Text style={[styles.summaryRank, { color: i === 0 ? theme.tint : theme.textSecondary }]}>
-                #{r.rank}
-              </Text>
-              <Text style={[styles.summaryTeam, { color: theme.text }]} numberOfLines={1}>
-                {r.teamName}
-              </Text>
-              <Text style={[styles.summaryPts, { color: theme.textSecondary }]}>
-                {r.totalPoints} pts
-              </Text>
-            </View>
-          ))}
+          {entry.rankings.slice(0, 4).map((r, i) => {
+            const team = entry.teams.find(t => t.name === r.teamName);
+            const playerNames = team ? team.players.map(p => p.name).join(', ') : '';
+            return (
+              <View key={i} style={styles.summaryRow}>
+                <Text style={[styles.summaryRank, { color: i === 0 ? theme.tint : theme.textSecondary }]}>
+                  #{r.rank}
+                </Text>
+                <View style={styles.summaryTeamCol}>
+                  <Text style={[styles.summaryTeam, { color: theme.text }]} numberOfLines={1}>
+                    {r.teamName}: {playerNames}
+                  </Text>
+                </View>
+                <Text style={[styles.summaryPts, { color: theme.textSecondary }]}>
+                  {r.totalPoints} pts
+                </Text>
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -87,15 +93,21 @@ function WeekCard({ entry }: { entry: WeekHistoryEntry }) {
         <View style={styles.expandedContent}>
           <View style={[styles.rankingsTable, { borderTopColor: theme.border }]}>
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>RANKINGS</Text>
-            {entry.rankings.map((r, i) => (
-              <View key={i} style={[styles.rankRow, { borderBottomColor: theme.border }]}>
-                <Text style={[styles.rankNum, { color: theme.tint }]}>#{r.rank}</Text>
-                <Text style={[styles.rankTeam, { color: theme.text }]} numberOfLines={1}>{r.teamName}</Text>
-                <Text style={[styles.rankStat, { color: theme.success }]}>{r.wins}W</Text>
-                <Text style={[styles.rankStat, { color: theme.error }]}>{r.losses}L</Text>
-                <Text style={[styles.rankPts, { color: theme.textSecondary }]}>{r.totalPoints}pts</Text>
-              </View>
-            ))}
+            {entry.rankings.map((r, i) => {
+              const team = entry.teams.find(t => t.name === r.teamName);
+              const playerNames = team ? team.players.map(p => p.name).join(', ') : '';
+              return (
+                <View key={i} style={[styles.rankRow, { borderBottomColor: theme.border }]}>
+                  <Text style={[styles.rankNum, { color: theme.tint }]}>#{r.rank}</Text>
+                  <View style={styles.rankTeamCol}>
+                    <Text style={[styles.rankTeam, { color: theme.text }]} numberOfLines={1}>{r.teamName}: {playerNames}</Text>
+                  </View>
+                  <Text style={[styles.rankStat, { color: theme.success }]}>{r.wins}W</Text>
+                  <Text style={[styles.rankStat, { color: theme.error }]}>{r.losses}L</Text>
+                  <Text style={[styles.rankPts, { color: theme.textSecondary }]}>{r.totalPoints}pts</Text>
+                </View>
+              );
+            })}
           </View>
 
           {rrGames.length > 0 && (
@@ -199,14 +211,16 @@ const styles = StyleSheet.create({
   weekSummary: { paddingHorizontal: 16, paddingBottom: 14, gap: 6 },
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   summaryRank: { fontSize: 13, fontFamily: 'Inter_700Bold', width: 24 },
-  summaryTeam: { fontSize: 14, fontFamily: 'Inter_400Regular', flex: 1 },
+  summaryTeamCol: { flex: 1 },
+  summaryTeam: { fontSize: 14, fontFamily: 'Inter_400Regular' },
   summaryPts: { fontSize: 13, fontFamily: 'Inter_400Regular' },
   expandedContent: { paddingHorizontal: 16, paddingBottom: 16 },
   sectionLabel: { fontSize: 11, fontFamily: 'Inter_700Bold', letterSpacing: 1, marginBottom: 8, marginTop: 16 },
   rankingsTable: { borderTopWidth: 1 },
   rankRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 0.5, gap: 8 },
   rankNum: { fontSize: 14, fontFamily: 'Inter_700Bold', width: 28 },
-  rankTeam: { fontSize: 14, fontFamily: 'Inter_600SemiBold', flex: 1 },
+  rankTeamCol: { flex: 1 },
+  rankTeam: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   rankStat: { fontSize: 13, fontFamily: 'Inter_600SemiBold', width: 28 },
   rankPts: { fontSize: 13, fontFamily: 'Inter_400Regular', width: 40, textAlign: 'right' as const },
   gamesSection: {},
