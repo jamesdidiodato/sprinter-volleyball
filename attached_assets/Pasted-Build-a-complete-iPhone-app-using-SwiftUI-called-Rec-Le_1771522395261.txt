@@ -1,0 +1,167 @@
+Build a complete iPhone app using SwiftUI called “Rec League Volleyball Tracker.”
+
+The app is used to manage weekly volleyball teams and track season standings.
+
+Core Requirements
+
+1. Player Setup
+
+There are 16 total players:
+
+4 Setters
+
+8 Hitters
+
+4 Back players
+
+Each player must have:
+
+Name
+
+Position (Setter / Hitter / Back)
+
+Season Wins (cumulative)
+
+Season Losses (cumulative)
+
+Allow editing player names.
+
+Persist all data locally using SwiftData or CoreData.
+
+2. Weekly Team Generation
+
+Each week:
+
+Randomly generate 4 teams.
+
+Each team must contain:
+
+1 Setter
+
+2 Hitters
+
+1 Back player
+
+Ensure no duplicate players on teams.
+
+Display teams clearly on screen.
+
+Add a “Generate New Week” button that:
+
+Resets weekly stats
+
+Creates new random teams
+
+Keeps cumulative season stats
+
+3. Game Format
+
+All 4 teams play each other once (round robin):
+
+Total of 6 games:
+
+Team 1 vs 2
+
+Team 1 vs 3
+
+Team 1 vs 4
+
+Team 2 vs 3
+
+Team 2 vs 4
+
+Team 3 vs 4
+
+Each game:
+
+First to 21 points wins.
+
+Simple score entry UI (two number inputs + save button).
+
+Validate that one team reaches at least 21 and has more points than opponent.
+
+4. Weekly Team Rankings
+
+After all 6 games are completed:
+
+Rank teams 1–4 based on total points scored across all 3 games.
+
+Highest total points = Rank 1.
+
+Display weekly standings table:
+
+Team Name
+
+Total Points Scored
+
+Wins
+
+Losses
+
+Rank
+
+5. Individual Player Standings (Season Long)
+
+Each player earns:
+
+1 win for each game their team wins
+
+1 loss for each game their team loses
+
+Update cumulative season totals automatically.
+
+Display sortable leaderboard:
+
+Player Name
+
+Position
+
+Season Wins
+
+Season Losses
+
+Win %
+
+This leaderboard must persist across weeks.
+
+6. UI Structure
+
+Use a TabView with 4 tabs:
+
+Players
+
+Weekly Teams
+
+Enter Scores
+
+Season Standings
+
+Design should be:
+
+Clean
+
+Minimal
+
+Dark mode compatible
+
+Large buttons for easy gym use
+
+7. Extra Features
+
+Add “Reset Season” button (with confirmation alert).
+
+Add “Export Standings” button (generate simple CSV file).
+
+Add basic animations when generating teams.
+
+8. Architecture
+
+Use MVVM pattern.
+
+Separate models for Player, Team, Game, Week.
+
+Keep logic modular and testable.
+
+Include sample mock data for preview.
+
+Generate full working SwiftUI code with comments explaining major sections.
