@@ -238,74 +238,47 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const generateNewWeek = useCallback(() => {
-    setCurrentWeek(prev => {
-      setPlayers(currentPlayers => {
-        if (prev && prev.phase === 'complete') {
-          const rankings = getRankingsFromGames(prev.teams, prev.games);
-          const entry: WeekHistoryEntry = {
-            weekNumber: prev.weekNumber,
-            teams: prev.teams,
-            games: prev.games,
-            semifinalGames: prev.semifinalGames,
-            finalGames: prev.finalGames,
-            rankings: rankings.map(r => ({
-              teamName: r.team.name,
-              totalPoints: r.totalPoints,
-              wins: r.wins,
-              losses: r.losses,
-              rank: r.rank,
-            })),
-          };
-          setHistory(prevHistory => {
-            const updated = [...prevHistory, entry];
-            saveHistory(updated);
-            return updated;
-          });
-        } else if (prev && prev.phase !== 'complete') {
-          const allGames = [...prev.games, ...prev.semifinalGames, ...prev.finalGames];
-          const completedGames = allGames.filter(g => g.completed);
-          if (completedGames.length > 0) {
-            const rankings = getRankingsFromGames(prev.teams, prev.games);
-            const entry: WeekHistoryEntry = {
-              weekNumber: prev.weekNumber,
-              teams: prev.teams,
-              games: prev.games,
-              semifinalGames: prev.semifinalGames,
-              finalGames: prev.finalGames,
-              rankings: rankings.map(r => ({
-                teamName: r.team.name,
-                totalPoints: r.totalPoints,
-                wins: r.wins,
-                losses: r.losses,
-                rank: r.rank,
-              })),
-            };
-            setHistory(prevHistory => {
-              const updated = [...prevHistory, entry];
-              saveHistory(updated);
-              return updated;
-            });
-          }
-        }
-
-        const teams = generateTeams(currentPlayers);
-        const games = generateRoundRobinGames(teams);
-        const weekNumber = prev ? prev.weekNumber + 1 : 1;
-        const newWeek: WeekData = {
-          teams,
-          games,
-          semifinalGames: [],
-          finalGames: [],
-          weekNumber,
-          phase: 'roundRobin',
+    if (currentWeek) {
+      const allGames = [...currentWeek.games, ...currentWeek.semifinalGames, ...currentWeek.finalGames];
+      const completedGames = allGames.filter(g => g.completed);
+      if (completedGames.length > 0) {
+        const rankings = getRankingsFromGames(currentWeek.teams, currentWeek.games);
+        const entry: WeekHistoryEntry = {
+          weekNumber: currentWeek.weekNumber,
+          teams: currentWeek.teams,
+          games: currentWeek.games,
+          semifinalGames: currentWeek.semifinalGames,
+          finalGames: currentWeek.finalGames,
+          rankings: rankings.map(r => ({
+            teamName: r.team.name,
+            totalPoints: r.totalPoints,
+            wins: r.wins,
+            losses: r.losses,
+            rank: r.rank,
+          })),
         };
-        saveWeek(newWeek);
-        setCurrentWeek(newWeek);
-        return currentPlayers;
-      });
-      return prev;
-    });
-  }, []);
+        setHistory(prevHistory => {
+          const updated = [...prevHistory, entry];
+          saveHistory(updated);
+          return updated;
+        });
+      }
+    }
+
+    const teams = generateTeams(players);
+    const games = generateRoundRobinGames(teams);
+    const weekNumber = currentWeek ? currentWeek.weekNumber + 1 : 1;
+    const newWeek: WeekData = {
+      teams,
+      games,
+      semifinalGames: [],
+      finalGames: [],
+      weekNumber,
+      phase: 'roundRobin',
+    };
+    setCurrentWeek(newWeek);
+    saveWeek(newWeek);
+  }, [currentWeek, players]);
 
   const applyWinLoss = useCallback((winnerId: string, loserId: string, teams: Team[]) => {
     const winningTeam = teams.find(t => t.id === winnerId);

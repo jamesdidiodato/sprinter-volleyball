@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withDelay, FadeIn } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withDelay } from 'react-native-reanimated';
 import Colors from '@/constants/colors';
 import { useVolleyball, Team } from '@/lib/volleyball-context';
 
@@ -74,6 +74,13 @@ export default function TeamsScreen() {
   const rankings = getTeamRankings();
   const hasCompletedGames = currentWeek?.games.some(g => g.completed) ?? false;
 
+  const phaseLabel = currentWeek ? {
+    roundRobin: 'Round Robin in progress',
+    semifinals: 'Semifinals in progress',
+    finals: 'Finals in progress',
+    complete: 'Week Complete',
+  }[currentWeek.phase] : '';
+
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: theme.background }]}
@@ -83,9 +90,16 @@ export default function TeamsScreen() {
     >
       <Text style={[styles.title, { color: theme.text }]}>Weekly Teams</Text>
       {currentWeek && (
-        <Text style={[styles.weekLabel, { color: theme.tint }]}>
-          Week {currentWeek.weekNumber}
-        </Text>
+        <View style={styles.weekMeta}>
+          <Text style={[styles.weekLabel, { color: theme.tint }]}>
+            Week {currentWeek.weekNumber}
+          </Text>
+          <View style={[styles.phasePill, { backgroundColor: currentWeek.phase === 'complete' ? theme.success + '20' : theme.tint + '20' }]}>
+            <Text style={[styles.phaseText, { color: currentWeek.phase === 'complete' ? theme.success : theme.tint }]}>
+              {phaseLabel}
+            </Text>
+          </View>
+        </View>
       )}
 
       <Pressable
@@ -96,7 +110,9 @@ export default function TeamsScreen() {
         ]}
       >
         <Ionicons name="shuffle" size={22} color="#FFF" />
-        <Text style={styles.generateText}>Generate New Week</Text>
+        <Text style={styles.generateText}>
+          {currentWeek ? 'Generate New Week' : 'Generate First Week'}
+        </Text>
       </Pressable>
 
       {!currentWeek && (
@@ -118,7 +134,7 @@ export default function TeamsScreen() {
 
       {hasCompletedGames && (
         <View style={styles.rankingsSection}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Weekly Rankings</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Round Robin Rankings</Text>
           <View style={[styles.rankTable, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <View style={[styles.rankHeaderRow, { borderBottomColor: theme.border }]}>
               <Text style={[styles.rankHeaderCell, styles.rankCol, { color: theme.textSecondary }]}>#</Text>
@@ -139,6 +155,71 @@ export default function TeamsScreen() {
           </View>
         </View>
       )}
+
+      {currentWeek && currentWeek.semifinalGames.length > 0 && (
+        <View style={styles.rankingsSection}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Semifinal Results</Text>
+          {currentWeek.semifinalGames.map(game => {
+            const team1 = currentWeek.teams.find(t => t.id === game.team1Id);
+            const team2 = currentWeek.teams.find(t => t.id === game.team2Id);
+            const done = game.completed;
+            const t1Won = done && (game.team1Score ?? 0) > (game.team2Score ?? 0);
+            return (
+              <View key={game.id} style={[styles.bracketGame, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <View style={styles.bracketRow}>
+                  <Text style={[styles.bracketTeam, { color: done ? (t1Won ? theme.tint : theme.textSecondary) : theme.text }]} numberOfLines={1}>
+                    {team1?.name ?? '?'}
+                  </Text>
+                  <Text style={[styles.bracketScore, { color: theme.text }]}>
+                    {done ? game.team1Score : '-'}
+                  </Text>
+                </View>
+                <View style={styles.bracketRow}>
+                  <Text style={[styles.bracketTeam, { color: done ? (!t1Won ? theme.tint : theme.textSecondary) : theme.text }]} numberOfLines={1}>
+                    {team2?.name ?? '?'}
+                  </Text>
+                  <Text style={[styles.bracketScore, { color: theme.text }]}>
+                    {done ? game.team2Score : '-'}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {currentWeek && currentWeek.finalGames.length > 0 && (
+        <View style={styles.rankingsSection}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Final Results</Text>
+          {currentWeek.finalGames.map(game => {
+            const team1 = currentWeek.teams.find(t => t.id === game.team1Id);
+            const team2 = currentWeek.teams.find(t => t.id === game.team2Id);
+            const done = game.completed;
+            const t1Won = done && (game.team1Score ?? 0) > (game.team2Score ?? 0);
+            return (
+              <View key={game.id} style={[styles.bracketGame, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                {game.label && <Text style={[styles.bracketLabel, { color: theme.textSecondary }]}>{game.label}</Text>}
+                <View style={styles.bracketRow}>
+                  <Text style={[styles.bracketTeam, { color: done ? (t1Won ? theme.tint : theme.textSecondary) : theme.text }]} numberOfLines={1}>
+                    {team1?.name ?? '?'}
+                  </Text>
+                  <Text style={[styles.bracketScore, { color: theme.text }]}>
+                    {done ? game.team1Score : '-'}
+                  </Text>
+                </View>
+                <View style={styles.bracketRow}>
+                  <Text style={[styles.bracketTeam, { color: done ? (!t1Won ? theme.tint : theme.textSecondary) : theme.text }]} numberOfLines={1}>
+                    {team2?.name ?? '?'}
+                  </Text>
+                  <Text style={[styles.bracketScore, { color: theme.text }]}>
+                    {done ? game.team2Score : '-'}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -147,7 +228,10 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 16 },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', marginBottom: 4 },
-  weekLabel: { fontSize: 16, fontFamily: 'Inter_600SemiBold', marginBottom: 16 },
+  weekMeta: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  weekLabel: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
+  phasePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  phaseText: { fontSize: 12, fontFamily: 'Inter_700Bold' },
   generateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -186,4 +270,9 @@ const styles = StyleSheet.create({
   rankCol: { width: 30 },
   teamCol: { flex: 1 },
   statCol: { width: 40, textAlign: 'center' as const },
+  bracketGame: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10 },
+  bracketLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', marginBottom: 8 },
+  bracketRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  bracketTeam: { fontSize: 15, fontFamily: 'Inter_600SemiBold', flex: 1 },
+  bracketScore: { fontSize: 16, fontFamily: 'Inter_700Bold', width: 40, textAlign: 'right' as const },
 });
