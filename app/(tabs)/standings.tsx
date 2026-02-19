@@ -7,8 +7,8 @@ import {
   Pressable,
   useColorScheme,
   Platform,
-  Alert,
   Share,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,7 +16,7 @@ import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import Colors from '@/constants/colors';
-import { useVolleyball, Player, Position } from '@/lib/volleyball-context';
+import { useVolleyball, Player } from '@/lib/volleyball-context';
 
 type SortKey = 'winPct' | 'wins' | 'losses' | 'name';
 
@@ -26,48 +26,33 @@ export default function StandingsScreen() {
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
   const { getPlayerStandings, resetSeason } = useVolleyball();
-
   const [sortBy, setSortBy] = useState<SortKey>('winPct');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const standings = getPlayerStandings();
 
   const sorted = [...standings].sort((a, b) => {
-    const aTotal = a.seasonWins + a.seasonLosses;
-    const bTotal = b.seasonWins + b.seasonLosses;
-    const aWinPct = aTotal > 0 ? a.seasonWins / aTotal : 0;
-    const bWinPct = bTotal > 0 ? b.seasonWins / bTotal : 0;
-
     switch (sortBy) {
-      case 'winPct':
-        if (bWinPct !== aWinPct) return bWinPct - aWinPct;
-        return b.seasonWins - a.seasonWins;
       case 'wins':
         return b.seasonWins - a.seasonWins;
       case 'losses':
         return b.seasonLosses - a.seasonLosses;
       case 'name':
         return a.name.localeCompare(b.name);
+      case 'winPct':
       default:
         return 0;
     }
   });
 
   const handleReset = () => {
-    Alert.alert(
-      'Erase All Data?',
-      'This will permanently erase all season standings, current teams, scores, and week history. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Erase Everything',
-          style: 'destructive',
-          onPress: () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            resetSeason();
-          },
-        },
-      ],
-    );
+    setShowResetConfirm(true);
+  };
+
+  const confirmReset = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    resetSeason();
+    setShowResetConfirm(false);
   };
 
   const handleExport = async () => {
@@ -123,6 +108,7 @@ export default function StandingsScreen() {
         </Pressable>
         <Pressable
           onPress={handleReset}
+          testID="reset-button"
           style={({ pressed }) => [
             styles.actionBtn,
             { backgroundColor: theme.error, opacity: pressed ? 0.85 : 1 },
@@ -193,6 +179,47 @@ export default function StandingsScreen() {
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
       />
+
+      <Modal
+        visible={showResetConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowResetConfirm(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowResetConfirm(false)}
+        >
+          <Pressable style={[styles.modalCard, { backgroundColor: isDark ? '#1E2D3D' : '#FFF' }]}>
+            <Ionicons name="warning" size={36} color={theme.error} style={styles.modalIcon} />
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Erase All Data?</Text>
+            <Text style={[styles.modalMessage, { color: theme.textSecondary }]}>
+              This will permanently erase all season standings, current teams, scores, and week history. This cannot be undone.
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setShowResetConfirm(false)}
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  { backgroundColor: isDark ? '#2A3A4A' : '#E8E8E8', opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Text style={[styles.modalBtnText, { color: theme.text }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={confirmReset}
+                testID="confirm-erase-button"
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  { backgroundColor: theme.error, opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Text style={[styles.modalBtnText, { color: '#FFF' }]}>Erase Everything</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -241,4 +268,29 @@ const styles = StyleSheet.create({
   pctW: { width: 44, textAlign: 'right' as const },
   miniPosBadge: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 4 },
   miniPosText: { color: '#FFF', fontSize: 10, fontFamily: 'Inter_700Bold' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 18,
+    padding: 28,
+    alignItems: 'center',
+  },
+  modalIcon: { marginBottom: 12 },
+  modalTitle: { fontSize: 20, fontFamily: 'Inter_700Bold', marginBottom: 8, textAlign: 'center' },
+  modalMessage: { fontSize: 14, fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  modalActions: { flexDirection: 'row', gap: 12, width: '100%' },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalBtnText: { fontSize: 14, fontFamily: 'Inter_700Bold' },
 });
