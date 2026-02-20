@@ -10,6 +10,7 @@ export const leagues = pgTable("leagues", {
   players: jsonb("players").notNull().default(sql`'[]'::jsonb`),
   currentWeek: jsonb("current_week"),
   history: jsonb("history").notNull().default(sql`'[]'::jsonb`),
+  settings: jsonb("settings").notNull().default(sql`'{"playersPerTeam":4,"numTeams":4}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
   lastAccessedAt: timestamp("last_accessed_at").defaultNow(),
 });
