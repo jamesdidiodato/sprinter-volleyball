@@ -39,9 +39,35 @@ interface WeekData {
   phase: 'roundRobin' | 'semifinals' | 'finals' | 'complete';
 }
 
+type LeagueFormat = 'roundRobin' | 'ladder';
+
 interface LeagueSettings {
   playersPerTeam: number;
   numTeams: number;
+  format: LeagueFormat;
+}
+
+interface LadderCourt {
+  courtNumber: number;
+  team1Id: string;
+  team2Id: string;
+  game: Game;
+}
+
+interface LadderRound {
+  roundNumber: number;
+  courts: LadderCourt[];
+  completed: boolean;
+}
+
+interface LadderWeekData {
+  teams: Team[];
+  rounds: LadderRound[];
+  currentRound: number;
+  totalRounds: number;
+  teamPoints: Record<string, number>;
+  weekNumber: number;
+  phase: 'playing' | 'complete';
 }
 
 function getPositionDistribution(playersPerTeam: number): { setters: number; hitters: number; liberos: number; defenders: number } {
@@ -203,6 +229,79 @@ function generateFinals(week: WeekData): Game[] {
   ];
 }
 
+function generateLadderRound(teams: Team[], roundNumber: number, previousRound?: LadderRound): LadderRound {
+  const numCourts = Math.floor(teams.length / 2);
+
+  let courtPairs: [string, string][] = [];
+
+  if (roundNumber === 1 || !previousRound) {
+    const ids = shuffle(teams.map(t => t.id));
+    for (let c = 0; c < numCourts; c++) {
+      courtPairs.push([ids[c * 2], ids[c * 2 + 1]]);
+    }
+  } else {
+    const winners: string[] = [];
+    const losers: string[] = [];
+    for (const court of previousRound.courts) {
+      const g = court.game;
+      if (g.completed) {
+        const w = (g.team1Score ?? 0) > (g.team2Score ?? 0) ? g.team1Id : g.team2Id;
+        const l = (g.team1Score ?? 0) > (g.team2Score ?? 0) ? g.team2Id : g.team1Id;
+        winners.push(w);
+        losers.push(l);
+      } else {
+        winners.push(court.team1Id);
+        losers.push(court.team2Id);
+      }
+    }
+
+    const newCourts: [string, string][] = [];
+    for (let c = 0; c < numCourts; c++) {
+      if (c === 0) {
+        newCourts.push([winners[0], losers[1] ?? losers[0]]);
+      } else if (c === numCourts - 1) {
+        newCourts.push([winners[numCourts - 1] ?? winners[c], losers[numCourts - 1]]);
+      } else {
+        newCourts.push([winners[c], losers[c + 1] ?? losers[c]]);
+      }
+    }
+
+    const used = new Set<string>();
+    courtPairs = newCourts.map(([a, b]) => {
+      used.add(a); used.add(b);
+      return [a, b] as [string, string];
+    });
+
+    const allIds = teams.map(t => t.id);
+    const missing = allIds.filter(id => !used.has(id));
+    if (missing.length > 0) {
+      for (let i = 0; i < courtPairs.length && missing.length > 0; i++) {
+        if (!allIds.includes(courtPairs[i][0]) || used.has(courtPairs[i][0])) {
+          continue;
+        }
+      }
+    }
+  }
+
+  const courts: LadderCourt[] = courtPairs.map((pair, c) => ({
+    courtNumber: c + 1,
+    team1Id: pair[0],
+    team2Id: pair[1],
+    game: {
+      id: randomUUID(),
+      team1Id: pair[0],
+      team2Id: pair[1],
+      team1Score: null,
+      team2Score: null,
+      completed: false,
+      round: 'roundRobin' as const,
+      label: `Court ${c + 1}`,
+    },
+  }));
+
+  return { roundNumber, courts, completed: false };
+}
+
 function getParamId(params: Record<string, string | string[]>, key: string): string {
   const val = params[key];
   return Array.isArray(val) ? val[0] : val;
@@ -211,14 +310,19 @@ function getParamId(params: Record<string, string | string[]>, key: string): str
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/leagues", async (req: Request, res: Response) => {
     try {
-      const { name, playersPerTeam, numTeams } = req.body;
+      const { name, playersPerTeam, numTeams, format } = req.body;
       if (!name || typeof name !== 'string' || name.trim().length === 0) {
         return res.status(400).json({ error: "League name is required" });
       }
       const ppt = typeof playersPerTeam === 'number' ? Math.min(6, Math.max(2, Math.round(playersPerTeam))) : 4;
       const nt = typeof numTeams === 'number' ? Math.max(2, Math.round(numTeams)) : 4;
+      const fmt: LeagueFormat = format === 'ladder' ? 'ladder' : 'roundRobin';
 
-      const settings: LeagueSettings = { playersPerTeam: ppt, numTeams: nt };
+      if (fmt === 'ladder' && nt % 2 !== 0) {
+        return res.status(400).json({ error: "Ladder format requires an even number of teams" });
+      }
+
+      const settings: LeagueSettings = { playersPerTeam: ppt, numTeams: nt, format: fmt };
       const players = generateDefaultPlayers(settings);
 
       const code = name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) +
@@ -259,14 +363,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const league = await storage.getLeague(leagueId);
       if (!league) return res.status(404).json({ error: "League not found" });
       storage.touchLeague(leagueId).catch(() => {});
+      const leagueSettings = (league.settings as LeagueSettings) || { playersPerTeam: 4, numTeams: 4, format: 'roundRobin' };
+      const isLadder = leagueSettings.format === 'ladder';
       return res.json({
         id: league.id,
         name: league.name,
         joinCode: league.joinCode,
         players: league.players,
-        currentWeek: league.currentWeek,
+        currentWeek: isLadder ? null : league.currentWeek,
+        ladderWeek: isLadder ? league.currentWeek : null,
         history: league.history,
-        settings: league.settings || { playersPerTeam: 4, numTeams: 4 },
+        settings: leagueSettings,
       });
     } catch (e: any) {
       console.error("Get league error:", e);
@@ -306,10 +413,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
       if (!league) return res.status(404).json({ error: "League not found" });
       const players = league.players as Player[];
-      const settings = (league.settings as LeagueSettings) || { playersPerTeam: 4, numTeams: 4 };
-      const currentWeek = league.currentWeek as WeekData | null;
+      const settings = (league.settings as LeagueSettings) || { playersPerTeam: 4, numTeams: 4, format: 'roundRobin' };
+      const isLadder = settings.format === 'ladder';
+      const currentWeekRaw = league.currentWeek;
       let history = (league.history as any[]) || [];
 
+      if (isLadder) {
+        const currentLadder = currentWeekRaw as LadderWeekData | null;
+        if (currentLadder && currentLadder.rounds) {
+          const anyCompleted = currentLadder.rounds.some(r => r.courts.some(c => c.game.completed));
+          if (anyCompleted) {
+            history = [...history, {
+              weekNumber: currentLadder.weekNumber,
+              teams: currentLadder.teams,
+              rounds: currentLadder.rounds,
+              teamPoints: currentLadder.teamPoints,
+              format: 'ladder',
+            }];
+          }
+        }
+
+        const teams = generateTeams(players, settings);
+        const firstRound = generateLadderRound(teams, 1);
+        const teamPoints: Record<string, number> = {};
+        teams.forEach(t => { teamPoints[t.id] = 0; });
+        const weekNumber = currentLadder ? currentLadder.weekNumber + 1 : 1;
+        const newLadder: LadderWeekData = {
+          teams,
+          rounds: [firstRound],
+          currentRound: 1,
+          totalRounds: 6,
+          teamPoints,
+          weekNumber,
+          phase: 'playing',
+        };
+
+        await storage.updateLeague(league.id, { currentWeek: newLadder, history });
+        return res.json({ ladderWeek: newLadder, history });
+      }
+
+      const currentWeek = currentWeekRaw as WeekData | null;
       if (currentWeek) {
         const allGames = [...currentWeek.games, ...currentWeek.semifinalGames, ...currentWeek.finalGames];
         const completedGames = allGames.filter(g => g.completed);
@@ -538,6 +681,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) {
       console.error("Undo score error:", e);
       return res.status(500).json({ error: "Failed to undo score" });
+    }
+  });
+
+  app.post("/api/leagues/:id/ladder-score", async (req: Request, res: Response) => {
+    try {
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
+      if (!league) return res.status(404).json({ error: "League not found" });
+      const ladderWeek = league.currentWeek as LadderWeekData | null;
+      if (!ladderWeek || !ladderWeek.rounds) return res.status(400).json({ error: "No ladder week active" });
+
+      const { roundNumber, courtNumber, team1Score, team2Score } = req.body;
+
+      if (team1Score > 21 || team2Score > 21) {
+        return res.status(400).json({ error: "Scores go to 21" });
+      }
+      if (Math.max(team1Score, team2Score) < 21) {
+        return res.status(400).json({ error: "Winner must reach at least 21" });
+      }
+      if (team1Score === team2Score) {
+        return res.status(400).json({ error: "Scores cannot be tied" });
+      }
+
+      let players = [...(league.players as Player[])];
+      const updatedLadder = { ...ladderWeek, rounds: [...ladderWeek.rounds] };
+      const roundIdx = updatedLadder.rounds.findIndex(r => r.roundNumber === roundNumber);
+      if (roundIdx === -1) return res.status(400).json({ error: "Round not found" });
+
+      const round = { ...updatedLadder.rounds[roundIdx], courts: [...updatedLadder.rounds[roundIdx].courts] };
+      const courtIdx = round.courts.findIndex(c => c.courtNumber === courtNumber);
+      if (courtIdx === -1) return res.status(400).json({ error: "Court not found" });
+
+      const court = { ...round.courts[courtIdx] };
+      court.game = { ...court.game, team1Score, team2Score, completed: true };
+      round.courts[courtIdx] = court;
+
+      const winnerId = team1Score > team2Score ? court.team1Id : court.team2Id;
+      const loserId = team1Score > team2Score ? court.team2Id : court.team1Id;
+
+      const winningTeam = ladderWeek.teams.find(t => t.id === winnerId);
+      const losingTeam = ladderWeek.teams.find(t => t.id === loserId);
+      if (winningTeam && losingTeam) {
+        const winnerIds = new Set(winningTeam.players.map(p => p.id));
+        const loserIds = new Set(losingTeam.players.map(p => p.id));
+        players = players.map(p => {
+          if (winnerIds.has(p.id)) return { ...p, seasonWins: p.seasonWins + 1 };
+          if (loserIds.has(p.id)) return { ...p, seasonLosses: p.seasonLosses + 1 };
+          return p;
+        });
+      }
+
+      const numCourts = Math.floor(ladderWeek.teams.length / 2);
+      const courtPoints = numCourts - courtNumber + 1;
+      const updatedPoints = { ...ladderWeek.teamPoints };
+      updatedPoints[winnerId] = (updatedPoints[winnerId] || 0) + courtPoints;
+      updatedPoints[loserId] = (updatedPoints[loserId] || 0) + Math.max(0, courtPoints - 1);
+      updatedLadder.teamPoints = updatedPoints;
+
+      if (round.courts.every(c => c.game.completed)) {
+        round.completed = true;
+      }
+      updatedLadder.rounds[roundIdx] = round;
+
+      await storage.updateLeague(league.id, { currentWeek: updatedLadder, players });
+      return res.json({ ladderWeek: updatedLadder, players });
+    } catch (e: any) {
+      console.error("Ladder score error:", e);
+      return res.status(500).json({ error: "Failed to submit ladder score" });
+    }
+  });
+
+  app.post("/api/leagues/:id/ladder-advance", async (req: Request, res: Response) => {
+    try {
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
+      if (!league) return res.status(404).json({ error: "League not found" });
+      const ladderWeek = league.currentWeek as LadderWeekData | null;
+      if (!ladderWeek || !ladderWeek.rounds) return res.status(400).json({ error: "No ladder week active" });
+
+      const currentRound = ladderWeek.rounds[ladderWeek.rounds.length - 1];
+      if (!currentRound || !currentRound.completed) {
+        return res.status(400).json({ error: "Current round not complete" });
+      }
+
+      if (ladderWeek.currentRound >= ladderWeek.totalRounds) {
+        const updatedLadder = { ...ladderWeek, phase: 'complete' as const };
+        await storage.updateLeague(league.id, { currentWeek: updatedLadder });
+        return res.json({ ladderWeek: updatedLadder });
+      }
+
+      const nextRound = generateLadderRound(ladderWeek.teams, ladderWeek.currentRound + 1, currentRound);
+      const updatedLadder = {
+        ...ladderWeek,
+        rounds: [...ladderWeek.rounds, nextRound],
+        currentRound: ladderWeek.currentRound + 1,
+      };
+
+      await storage.updateLeague(league.id, { currentWeek: updatedLadder });
+      return res.json({ ladderWeek: updatedLadder });
+    } catch (e: any) {
+      console.error("Ladder advance error:", e);
+      return res.status(500).json({ error: "Failed to advance ladder round" });
     }
   });
 
