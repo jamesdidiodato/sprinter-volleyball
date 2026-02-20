@@ -1,38 +1,42 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { leagues, type League, type InsertLeague } from "@shared/schema";
 
-// modify the interface with any CRUD methods
-// you might need
+const db = drizzle(process.env.DATABASE_URL!);
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  createLeague(data: InsertLeague & { players: any[] }): Promise<League>;
+  getLeagueByCode(joinCode: string): Promise<League | undefined>;
+  getLeague(id: number): Promise<League | undefined>;
+  updateLeague(id: number, data: Partial<{ players: any; currentWeek: any; history: any }>): Promise<League | undefined>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+class DatabaseStorage implements IStorage {
+  async createLeague(data: InsertLeague & { players: any[] }): Promise<League> {
+    const [league] = await db.insert(leagues).values({
+      name: data.name,
+      joinCode: data.joinCode,
+      players: data.players,
+      currentWeek: null,
+      history: [],
+    }).returning();
+    return league;
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getLeagueByCode(joinCode: string): Promise<League | undefined> {
+    const [league] = await db.select().from(leagues).where(eq(leagues.joinCode, joinCode.toUpperCase()));
+    return league;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async getLeague(id: number): Promise<League | undefined> {
+    const [league] = await db.select().from(leagues).where(eq(leagues.id, id));
+    return league;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async updateLeague(id: number, data: Partial<{ players: any; currentWeek: any; history: any }>): Promise<League | undefined> {
+    const [league] = await db.update(leagues).set(data).where(eq(leagues.id, id)).returning();
+    return league;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
