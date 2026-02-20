@@ -33,6 +33,9 @@ Preferred communication style: Simple, everyday language.
   - `POST /api/leagues/:id/swap-players` - Swap two players between teams
   - `POST /api/leagues/:id/submit-score` - Submit a game score (handles round-robin → semifinals → finals progression)
   - `POST /api/leagues/:id/reset` - Reset season (clear wins/losses, current week, history)
+  - `POST /api/admin/login` - Verify admin password
+  - `POST /api/admin/leagues` - List all leagues (requires password in body)
+  - `POST /api/admin/leagues/:id/delete` - Delete a league (requires password in body)
 - **Storage**: PostgreSQL-backed storage (`server/storage.ts`) with `IStorage` interface
 - **Game Logic**: Server-side tournament bracket generation (round-robin → semifinals → finals), score validation, win/loss tracking
 - **CORS**: Dynamic CORS configuration supporting Replit dev/deployment domains and localhost
@@ -48,6 +51,7 @@ Preferred communication style: Simple, everyday language.
   - `current_week`: JSONB (nullable, contains teams, games, semifinalGames, finalGames, weekNumber, phase)
   - `history`: JSONB (array of completed week entries with rankings)
   - `created_at`: timestamp
+  - `last_accessed_at`: timestamp (updated on each league data fetch)
 - **Validation**: Uses `drizzle-zod` for generating Zod schemas from Drizzle table definitions
 
 ### Key Design Decisions
