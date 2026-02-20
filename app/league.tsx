@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -23,6 +24,7 @@ export default function LeagueScreen() {
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
   const { createLeague, joinLeague } = useVolleyball();
+  const router = useRouter();
 
   const [mode, setMode] = useState<'choose' | 'create' | 'join'>('choose');
   const [leagueName, setLeagueName] = useState('');
@@ -117,6 +119,17 @@ export default function LeagueScreen() {
               </Text>
             </Pressable>
           </View>
+
+          <Pressable
+            onPress={() => { router.push('/admin'); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+            style={({ pressed }) => [
+              styles.adminBtn,
+              { opacity: pressed ? 0.6 : 0.8 },
+            ]}
+          >
+            <Ionicons name="shield-checkmark" size={16} color={theme.textSecondary} />
+            <Text style={[styles.adminBtnText, { color: theme.textSecondary }]}>Manage Active Leagues</Text>
+          </Pressable>
         </ScrollView>
       </View>
     );
@@ -270,4 +283,13 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   submitText: { color: '#FFF', fontSize: 16, fontFamily: 'Inter_700Bold' },
+  adminBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 32,
+    paddingVertical: 10,
+  },
+  adminBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
 });
