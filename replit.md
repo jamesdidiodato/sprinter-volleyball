@@ -2,7 +2,7 @@
 
 ## Overview
 
-Sprinter Volleyball Tracker is a recreational league volleyball management app built with Expo (React Native) for the frontend and Express.js for the backend. The app manages weekly volleyball teams and tracks season standings for a 16-player league (4 Setters, 8 Hitters, 4 Back players). Core features include player management, random weekly team generation (4 teams of 4), score tracking through round-robin/semifinal/final tournament phases, cumulative season standings, and week history.
+Sprinter Volleyball Tracker is a multi-user recreational league volleyball management app built with Expo (React Native) for the frontend and Express.js for the backend. Multiple leagues can operate independently, each accessed via unique join codes. Each league manages 16 players across 3 positions (4 Setters, 8 Hitters, 4 Back), with random weekly team generation (4 teams of 4), score tracking through round-robin/semifinal/final tournament phases, cumulative season standings with CSV export, and historical tracking. All data is shared in real-time across devices within a league.
 
 ## User Preferences
 
@@ -13,38 +13,55 @@ Preferred communication style: Simple, everyday language.
 ### Frontend (Expo / React Native)
 - **Framework**: Expo SDK 54 with React Native 0.81, using expo-router for file-based routing with typed routes
 - **Navigation**: Tab-based layout with 5 tabs: Players, Teams, Scores, Standings, History (located in `app/(tabs)/`)
-- **State Management**: Custom React context (`VolleyballProvider` in `lib/volleyball-context.tsx`) handles all volleyball game logic. Data is persisted locally using `@react-native-async-storage/async-storage` — not the server database
-- **Data Fetching**: TanStack React Query with a custom API client (`lib/query-client.ts`) that constructs URLs from `EXPO_PUBLIC_DOMAIN` environment variable
+- **League Selection**: When no league is cached locally, shows league selection screen (`app/league.tsx`) with Create/Join options. League info (id, name, joinCode) is cached in AsyncStorage for persistence
+- **State Management**: Custom React context (`VolleyballProvider` in `lib/volleyball-context.tsx`) handles all volleyball game logic. Data is fetched from the server API and cached in React state. League selection is persisted locally via `@react-native-async-storage/async-storage`
+- **Data Fetching**: Custom API client (`lib/query-client.ts`) that constructs URLs from `EXPO_PUBLIC_DOMAIN` environment variable. All volleyball operations (create/join league, update players, generate weeks, submit scores, swap players, reset season) go through the Express API
 - **Styling**: Direct StyleSheet usage with a custom color theme system (`constants/colors.ts`) supporting light/dark mode with orange/navy brand colors
 - **Fonts**: Inter font family (Regular, SemiBold, Bold) via `@expo-google-fonts/inter`
 - **Animations**: react-native-reanimated for team card animations
-- **Platform Support**: iOS, Android, and Web (with platform-specific adaptations like `KeyboardAwareScrollViewCompat`)
+- **Platform Support**: iOS, Android, and Web (with platform-specific adaptations)
 - **Tab Layout**: Dual implementation — uses native SF Symbol tabs on iOS 26+ (liquid glass), falls back to classic Ionicons tabs elsewhere
 
 ### Backend (Express.js)
 - **Server**: Express 5 running on Node.js (`server/index.ts`)
-- **Routes**: Registered in `server/routes.ts` — currently minimal with just the HTTP server setup. API routes should be prefixed with `/api`
-- **Storage**: In-memory storage implementation (`server/storage.ts`) with an `IStorage` interface. Currently only has basic user CRUD — the volleyball data lives entirely on the client side via AsyncStorage
+- **Routes**: Registered in `server/routes.ts` with comprehensive API endpoints prefixed with `/api`:
+  - `POST /api/leagues` - Create a new league (generates unique join code, initializes 16 default players)
+  - `POST /api/leagues/join` - Join existing league by code
+  - `GET /api/leagues/:id` - Get full league data (players, currentWeek, history)
+  - `PUT /api/leagues/:id/players/:playerId` - Update player name
+  - `POST /api/leagues/:id/generate-week` - Generate random teams for new week
+  - `POST /api/leagues/:id/swap-players` - Swap two players between teams
+  - `POST /api/leagues/:id/submit-score` - Submit a game score (handles round-robin → semifinals → finals progression)
+  - `POST /api/leagues/:id/reset` - Reset season (clear wins/losses, current week, history)
+- **Storage**: PostgreSQL-backed storage (`server/storage.ts`) with `IStorage` interface
+- **Game Logic**: Server-side tournament bracket generation (round-robin → semifinals → finals), score validation, win/loss tracking
 - **CORS**: Dynamic CORS configuration supporting Replit dev/deployment domains and localhost
 - **Static Serving**: In production, serves a static landing page from `server/templates/landing-page.html`; in development, proxies to the Expo Metro bundler
 
 ### Database Schema
 - **ORM**: Drizzle ORM configured for PostgreSQL (`drizzle.config.ts`)
-- **Schema**: Defined in `shared/schema.ts` — currently only has a `users` table with id, username, and password fields
+- **Schema**: Defined in `shared/schema.ts` with a `leagues` table:
+  - `id`: serial primary key
+  - `name`: text (league name)
+  - `join_code`: text, unique (e.g., "SPRNT4K2X")
+  - `players`: JSONB (array of 16 player objects with id, name, position, seasonWins, seasonLosses)
+  - `current_week`: JSONB (nullable, contains teams, games, semifinalGames, finalGames, weekNumber, phase)
+  - `history`: JSONB (array of completed week entries with rankings)
+  - `created_at`: timestamp
 - **Validation**: Uses `drizzle-zod` for generating Zod schemas from Drizzle table definitions
-- **Note**: The volleyball game data (players, teams, games, standings, history) is NOT in the database — it's all managed client-side through AsyncStorage. The server schema is a boilerplate starting point
 
 ### Key Design Decisions
-- **Client-side data persistence**: All volleyball data uses AsyncStorage rather than server-side storage. This means the app works offline but data doesn't sync across devices
-- **Tournament structure**: Each week follows a round-robin → semifinals → finals progression with scoring validation (winner must reach 21+)
+- **Multi-user via join codes**: Users create or join leagues using unique codes — no individual user accounts needed. League info is cached locally in AsyncStorage
+- **Server-side data persistence**: All volleyball data is stored in PostgreSQL via JSONB columns. This allows real-time data sharing across all devices in a league
+- **Tournament structure**: Each week follows a round-robin → semifinals → finals progression with scoring validation (winner must reach 21+, scores max at 21)
 - **Player composition**: Fixed roster of 16 players with enforced team composition (1 Setter, 2 Hitters, 1 Back per team)
 - **Build system**: Custom build script (`scripts/build.js`) handles Expo static builds for deployment, with esbuild for server bundling
 
 ## External Dependencies
 
 ### Core Services
-- **PostgreSQL**: Connected via `DATABASE_URL` environment variable, used by Drizzle ORM (currently only for user schema)
-- **AsyncStorage**: Local device storage for all volleyball game data
+- **PostgreSQL**: Connected via `DATABASE_URL` environment variable, stores all league data in JSONB columns
+- **AsyncStorage**: Local device storage for league selection cache only (not game data)
 
 ### Key NPM Packages
 - **expo** (~54.0.27): Mobile app framework
