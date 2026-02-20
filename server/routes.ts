@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { storage } from "./storage";
 import { randomUUID } from "crypto";
 
-type Position = 'Setter' | 'Hitter' | 'Back';
+type Position = 'Setter' | 'Hitter' | 'Libero' | 'Defender';
 
 interface Player {
   id: string;
@@ -44,29 +44,29 @@ interface LeagueSettings {
   numTeams: number;
 }
 
-function getPositionDistribution(playersPerTeam: number): { setters: number; hitters: number; backs: number } {
-  if (playersPerTeam === 2) return { setters: 1, hitters: 1, backs: 0 };
-  if (playersPerTeam === 3) return { setters: 1, hitters: 1, backs: 1 };
-  if (playersPerTeam === 4) return { setters: 1, hitters: 2, backs: 1 };
-  if (playersPerTeam === 5) return { setters: 1, hitters: 2, backs: 2 };
-  return { setters: 1, hitters: 3, backs: 2 };
+function getPositionDistribution(playersPerTeam: number): { setters: number; hitters: number; liberos: number; defenders: number } {
+  if (playersPerTeam === 2) return { setters: 1, hitters: 1, liberos: 0, defenders: 0 };
+  if (playersPerTeam === 3) return { setters: 1, hitters: 2, liberos: 0, defenders: 0 };
+  if (playersPerTeam === 4) return { setters: 1, hitters: 2, liberos: 1, defenders: 0 };
+  if (playersPerTeam === 5) return { setters: 1, hitters: 3, liberos: 1, defenders: 0 };
+  return { setters: 1, hitters: 3, liberos: 1, defenders: 1 };
 }
 
 function generateDefaultPlayers(settings: LeagueSettings): Player[] {
   const dist = getPositionDistribution(settings.playersPerTeam);
-  const totalSetters = dist.setters * settings.numTeams;
-  const totalHitters = dist.hitters * settings.numTeams;
-  const totalBacks = dist.backs * settings.numTeams;
   const players: Player[] = [];
   let id = 1;
-  for (let i = 0; i < totalSetters; i++) {
+  for (let i = 0; i < dist.setters * settings.numTeams; i++) {
     players.push({ id: String(id++), name: `Setter ${i + 1}`, position: 'Setter', seasonWins: 0, seasonLosses: 0 });
   }
-  for (let i = 0; i < totalHitters; i++) {
+  for (let i = 0; i < dist.hitters * settings.numTeams; i++) {
     players.push({ id: String(id++), name: `Hitter ${i + 1}`, position: 'Hitter', seasonWins: 0, seasonLosses: 0 });
   }
-  for (let i = 0; i < totalBacks; i++) {
-    players.push({ id: String(id++), name: `Back ${i + 1}`, position: 'Back', seasonWins: 0, seasonLosses: 0 });
+  for (let i = 0; i < dist.liberos * settings.numTeams; i++) {
+    players.push({ id: String(id++), name: `Libero ${i + 1}`, position: 'Libero', seasonWins: 0, seasonLosses: 0 });
+  }
+  for (let i = 0; i < dist.defenders * settings.numTeams; i++) {
+    players.push({ id: String(id++), name: `Defender ${i + 1}`, position: 'Defender', seasonWins: 0, seasonLosses: 0 });
   }
   return players;
 }
@@ -87,7 +87,8 @@ function generateTeams(players: Player[], settings: LeagueSettings): Team[] {
   const dist = getPositionDistribution(settings.playersPerTeam);
   const setters = shuffle(players.filter(p => p.position === 'Setter'));
   const hitters = shuffle(players.filter(p => p.position === 'Hitter'));
-  const backs = shuffle(players.filter(p => p.position === 'Back'));
+  const liberos = shuffle(players.filter(p => p.position === 'Libero'));
+  const defenders = shuffle(players.filter(p => p.position === 'Defender'));
 
   const teams: Team[] = [];
   for (let i = 0; i < settings.numTeams; i++) {
@@ -98,8 +99,11 @@ function generateTeams(players: Player[], settings: LeagueSettings): Team[] {
     for (let h = 0; h < dist.hitters; h++) {
       teamPlayers.push(hitters[i * dist.hitters + h]);
     }
-    for (let b = 0; b < dist.backs; b++) {
-      teamPlayers.push(backs[i * dist.backs + b]);
+    for (let l = 0; l < dist.liberos; l++) {
+      teamPlayers.push(liberos[i * dist.liberos + l]);
+    }
+    for (let d = 0; d < dist.defenders; d++) {
+      teamPlayers.push(defenders[i * dist.defenders + d]);
     }
     teams.push({
       id: randomUUID(),

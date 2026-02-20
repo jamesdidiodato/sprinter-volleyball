@@ -26,7 +26,8 @@ export default {
     error: red,
     setter: "#5C6BC0",
     hitter: orange,
-    back: "#26A69A",
+    libero: "#26A69A",
+    defender: "#AB47BC",
     cream: cream,
   },
   dark: {
@@ -43,7 +44,8 @@ export default {
     error: red,
     setter: "#7986CB",
     hitter: orange,
-    back: "#4DB6AC",
+    libero: "#4DB6AC",
+    defender: "#CE93D8",
     cream: cream,
   },
 };

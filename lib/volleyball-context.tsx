@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from './query-client';
 
-export type Position = 'Setter' | 'Hitter' | 'Back';
+export type Position = 'Setter' | 'Hitter' | 'Libero' | 'Defender';
 
 export interface Player {
   id: string;

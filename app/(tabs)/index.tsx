@@ -18,10 +18,11 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useVolleyball, Position } from '@/lib/volleyball-context';
 
-const POSITION_LABELS: Record<Position, string> = {
+const POSITION_LABELS: Record<string, string> = {
   Setter: 'S',
   Hitter: 'H',
-  Back: 'B',
+  Libero: 'L',
+  Defender: 'D',
 };
 
 function PlayerRow({ player, onEdit }: { player: any; onEdit: (id: string, name: string) => void }) {
@@ -31,7 +32,7 @@ function PlayerRow({ player, onEdit }: { player: any; onEdit: (id: string, name:
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(player.name);
 
-  const posColor = theme[player.position.toLowerCase() as 'setter' | 'hitter' | 'back'];
+  const posColor = (theme as any)[player.position.toLowerCase()] || theme.tint;
 
   const handleSave = () => {
     if (name.trim()) {
@@ -105,7 +106,8 @@ export default function PlayersScreen() {
 
   const filtered = filter === 'All' ? players : players.filter(p => p.position === filter);
 
-  const positions: Array<Position | 'All'> = ['All', 'Setter', 'Hitter', 'Back'];
+  const allPositions = Array.from(new Set(players.map(p => p.position)));
+  const positions: Array<string> = ['All', ...allPositions];
 
   const handleLeave = () => {
     leaveLeague();

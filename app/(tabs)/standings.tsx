@@ -152,7 +152,7 @@ export default function StandingsScreen() {
   const renderPlayer = ({ item, index }: { item: Player; index: number }) => {
     const total = item.seasonWins + item.seasonLosses;
     const pct = total > 0 ? ((item.seasonWins / total) * 100).toFixed(0) : '-';
-    const posColor = theme[item.position.toLowerCase() as 'setter' | 'hitter' | 'back'];
+    const posColor = (theme as any)[item.position.toLowerCase()] || theme.tint;
 
     return (
       <View style={[styles.tableRow, { backgroundColor: theme.card, borderColor: theme.border }]}>

@@ -16,7 +16,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring, withDelay } fro
 import Colors from '@/constants/colors';
 import { useVolleyball, Team, Player } from '@/lib/volleyball-context';
 
-const POSITION_LABELS: Record<string, string> = { Setter: 'S', Hitter: 'H', Back: 'B' };
+const POSITION_LABELS: Record<string, string> = { Setter: 'S', Hitter: 'H', Libero: 'L', Defender: 'D' };
 
 function TeamCard({ team, index, editMode, selectedPlayer, onPlayerTap }: {
   team: Team;
@@ -59,7 +59,7 @@ function TeamCard({ team, index, editMode, selectedPlayer, onPlayerTap }: {
         )}
       </View>
       {team.players.map(player => {
-        const posColor = theme[player.position.toLowerCase() as 'setter' | 'hitter' | 'back'];
+        const posColor = (theme as any)[player.position.toLowerCase()] || theme.tint;
         const isSelected = selectedPlayer?.playerId === player.id && isSelectedTeam;
         const isValidTarget = editMode && selectedPlayer && !isSelectedTeam;
 
