@@ -240,9 +240,10 @@ function generateLadderRound(teams: Team[], roundNumber: number, previousRound?:
       courtPairs.push([ids[c * 2], ids[c * 2 + 1]]);
     }
   } else {
+    const prevCourts = [...previousRound.courts].sort((a, b) => a.courtNumber - b.courtNumber);
     const winners: string[] = [];
     const losers: string[] = [];
-    for (const court of previousRound.courts) {
+    for (const court of prevCourts) {
       const g = court.game;
       if (g.completed) {
         const w = (g.team1Score ?? 0) > (g.team2Score ?? 0) ? g.team1Id : g.team2Id;
@@ -255,30 +256,13 @@ function generateLadderRound(teams: Team[], roundNumber: number, previousRound?:
       }
     }
 
-    const newCourts: [string, string][] = [];
     for (let c = 0; c < numCourts; c++) {
       if (c === 0) {
-        newCourts.push([winners[0], losers[1] ?? losers[0]]);
+        courtPairs.push([winners[0], winners[1]]);
       } else if (c === numCourts - 1) {
-        newCourts.push([winners[numCourts - 1] ?? winners[c], losers[numCourts - 1]]);
+        courtPairs.push([losers[c - 1], losers[c]]);
       } else {
-        newCourts.push([winners[c], losers[c + 1] ?? losers[c]]);
-      }
-    }
-
-    const used = new Set<string>();
-    courtPairs = newCourts.map(([a, b]) => {
-      used.add(a); used.add(b);
-      return [a, b] as [string, string];
-    });
-
-    const allIds = teams.map(t => t.id);
-    const missing = allIds.filter(id => !used.has(id));
-    if (missing.length > 0) {
-      for (let i = 0; i < courtPairs.length && missing.length > 0; i++) {
-        if (!allIds.includes(courtPairs[i][0]) || used.has(courtPairs[i][0])) {
-          continue;
-        }
+        courtPairs.push([losers[c - 1], winners[c + 1]]);
       }
     }
   }
