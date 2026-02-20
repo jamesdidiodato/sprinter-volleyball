@@ -195,8 +195,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/leagues/:id", async (req: Request, res: Response) => {
     try {
-      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
+      const leagueId = parseInt(getParamId(req.params, 'id'));
+      const league = await storage.getLeague(leagueId);
       if (!league) return res.status(404).json({ error: "League not found" });
+      storage.touchLeague(leagueId).catch(() => {});
       return res.json({
         id: league.id,
         name: league.name,
@@ -407,6 +409,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) {
       console.error("Reset error:", e);
       return res.status(500).json({ error: "Failed to reset" });
+    }
+  });
+
+  app.post("/api/admin/login", async (req: Request, res: Response) => {
+    try {
+      const { password } = req.body;
+      if (!password || password !== process.env.ADMIN_PASSWORD) {
+        return res.status(401).json({ error: "Invalid password" });
+      }
+      return res.json({ success: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  app.post("/api/admin/leagues", async (req: Request, res: Response) => {
+    try {
+      const { password } = req.body;
+      if (!password || password !== process.env.ADMIN_PASSWORD) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const allLeagues = await storage.getAllLeagues();
+      const summary = allLeagues.map(l => ({
+        id: l.id,
+        name: l.name,
+        joinCode: l.joinCode,
+        playerCount: Array.isArray(l.players) ? (l.players as any[]).length : 0,
+        weeksPlayed: Array.isArray(l.history) ? (l.history as any[]).length : 0,
+        createdAt: l.createdAt,
+        lastAccessedAt: l.lastAccessedAt,
+      }));
+      return res.json({ leagues: summary });
+    } catch (e: any) {
+      console.error("Admin list leagues error:", e);
+      return res.status(500).json({ error: "Failed to list leagues" });
+    }
+  });
+
+  app.post("/api/admin/leagues/:id/delete", async (req: Request, res: Response) => {
+    try {
+      const { password } = req.body;
+      if (!password || password !== process.env.ADMIN_PASSWORD) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const leagueId = parseInt(getParamId(req.params, 'id'));
+      const deleted = await storage.deleteLeague(leagueId);
+      if (!deleted) return res.status(404).json({ error: "League not found" });
+      return res.json({ success: true });
+    } catch (e: any) {
+      console.error("Admin delete league error:", e);
+      return res.status(500).json({ error: "Failed to delete league" });
     }
   });
 
