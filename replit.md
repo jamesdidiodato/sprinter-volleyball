@@ -2,7 +2,7 @@
 
 ## Overview
 
-Sprinter Volleyball Tracker is a multi-user recreational league volleyball management app built with Expo (React Native) for the frontend and Express.js for the backend. Multiple leagues can operate independently, each accessed via unique join codes. Each league manages 16 players across 3 positions (4 Setters, 8 Hitters, 4 Back), with random weekly team generation (4 teams of 4), score tracking through round-robin/semifinal/final tournament phases, cumulative season standings with CSV export, and historical tracking. All data is shared in real-time across devices within a league.
+Sprinter Volleyball Tracker is a multi-user recreational league volleyball management app built with Expo (React Native) for the frontend and Express.js for the backend. Multiple leagues can operate independently, each accessed via unique join codes. Each league has configurable team settings (2-6 players per team, variable number of teams) set during creation. Player counts and positions scale automatically based on settings. Tournament flow adapts: round-robin only for 2-3 teams, full round-robin → semifinals → finals for 4+ teams. Features include random weekly team generation, score tracking, cumulative season standings with CSV export, and historical tracking. All data is shared in real-time across devices within a league.
 
 ## User Preferences
 
@@ -47,9 +47,10 @@ Preferred communication style: Simple, everyday language.
   - `id`: serial primary key
   - `name`: text (league name)
   - `join_code`: text, unique (e.g., "SPRNT4K2X")
-  - `players`: JSONB (array of 16 player objects with id, name, position, seasonWins, seasonLosses)
+  - `players`: JSONB (array of player objects with id, name, position, seasonWins, seasonLosses — count depends on settings)
   - `current_week`: JSONB (nullable, contains teams, games, semifinalGames, finalGames, weekNumber, phase)
   - `history`: JSONB (array of completed week entries with rankings)
+  - `settings`: JSONB (league configuration: playersPerTeam (2-6), numTeams — defaults to {playersPerTeam:4, numTeams:4})
   - `created_at`: timestamp
   - `last_accessed_at`: timestamp (updated on each league data fetch)
 - **Validation**: Uses `drizzle-zod` for generating Zod schemas from Drizzle table definitions
@@ -57,8 +58,8 @@ Preferred communication style: Simple, everyday language.
 ### Key Design Decisions
 - **Multi-user via join codes**: Users create or join leagues using unique codes — no individual user accounts needed. League info is cached locally in AsyncStorage
 - **Server-side data persistence**: All volleyball data is stored in PostgreSQL via JSONB columns. This allows real-time data sharing across all devices in a league
-- **Tournament structure**: Each week follows a round-robin → semifinals → finals progression with scoring validation (winner must reach 21+, scores max at 21)
-- **Player composition**: Fixed roster of 16 players with enforced team composition (1 Setter, 2 Hitters, 1 Back per team)
+- **Tournament structure**: Each week follows round-robin for all team counts. For 4+ teams: round-robin → semifinals → finals. For 2-3 teams: round-robin only. Scoring validation (winner must reach 21+, scores max at 21)
+- **Player composition**: Configurable roster size (numTeams × playersPerTeam). Position distribution per team: 1 Setter always, remaining split between Hitters and Backs based on team size
 - **Build system**: Custom build script (`scripts/build.js`) handles Expo static builds for deployment, with esbuild for server bundling
 
 ## External Dependencies
