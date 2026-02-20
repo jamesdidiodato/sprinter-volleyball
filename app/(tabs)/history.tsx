@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import { useVolleyball, WeekHistoryEntry, Game } from '@/lib/volleyball-context';
+import { useVolleyball, WeekHistoryEntry, Game, LadderRound } from '@/lib/volleyball-context';
 
 function extractYouTubeId(url: string): string | null {
   const patterns = [
@@ -318,6 +318,131 @@ function WeekCard({ entry }: { entry: WeekHistoryEntry }) {
   );
 }
 
+interface LadderHistoryEntry {
+  weekNumber: number;
+  teams: any[];
+  rounds: LadderRound[];
+  teamPoints: Record<string, number>;
+  format: 'ladder';
+  videoUrl?: string;
+}
+
+function LadderWeekCard({ entry }: { entry: LadderHistoryEntry }) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const theme = isDark ? Colors.dark : Colors.light;
+  const [expanded, setExpanded] = useState(false);
+
+  const totalGames = entry.rounds.reduce((acc, r) => acc + r.courts.length, 0);
+  const completedGames = entry.rounds.reduce((acc, r) => acc + r.courts.filter(c => c.game.completed).length, 0);
+  const hasVideo = !!entry.videoUrl;
+
+  const pointsSorted = Object.entries(entry.teamPoints)
+    .map(([teamId, pts]) => ({ team: entry.teams.find((t: any) => t.id === teamId), points: pts as number }))
+    .filter(e => e.team)
+    .sort((a, b) => b.points - a.points);
+
+  return (
+    <View style={[styles.weekCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <Pressable
+        onPress={() => { setExpanded(!expanded); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+        style={styles.weekCardHeader}
+      >
+        <View style={styles.weekTitleRow}>
+          <View style={styles.weekTitleLine}>
+            <Text style={[styles.weekTitle, { color: theme.text }]}>Week {entry.weekNumber}</Text>
+            <View style={[styles.ladderBadge, { backgroundColor: theme.setter + '20' }]}>
+              <Text style={[styles.ladderBadgeText, { color: theme.setter }]}>Ladder</Text>
+            </View>
+            {hasVideo && (
+              <Ionicons name="videocam" size={16} color="#FF0000" style={{ marginLeft: 8 }} />
+            )}
+          </View>
+          <Text style={[styles.weekGameCount, { color: theme.textSecondary }]}>
+            {entry.rounds.length} rounds, {completedGames}/{totalGames} games
+          </Text>
+        </View>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={theme.textSecondary} />
+      </Pressable>
+
+      {!expanded && (
+        <View style={styles.weekSummary}>
+          {pointsSorted.slice(0, 4).map((e, i) => (
+            <View key={e.team.id} style={styles.summaryRow}>
+              <Text style={[styles.summaryRank, { color: i === 0 ? theme.tint : theme.textSecondary }]}>#{i + 1}</Text>
+              <View style={styles.summaryTeamCol}>
+                <Text style={[styles.summaryTeam, { color: theme.text }]} numberOfLines={1}>
+                  {e.team.name}
+                </Text>
+              </View>
+              <Text style={[styles.summaryPts, { color: theme.textSecondary }]}>{e.points} pts</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {expanded && (
+        <View style={styles.expandedContent}>
+          {entry.videoUrl && (
+            <VideoSection entry={entry as any} theme={theme} />
+          )}
+
+          <View style={[styles.rankingsTable, { borderTopColor: theme.border }]}>
+            <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>FINAL STANDINGS</Text>
+            {pointsSorted.map((e, i) => (
+              <View key={e.team.id} style={[styles.rankRow, { borderBottomColor: theme.border }]}>
+                <Text style={[styles.rankNum, { color: theme.tint }]}>#{i + 1}</Text>
+                <View style={styles.rankTeamCol}>
+                  <Text style={[styles.rankTeam, { color: theme.text }]} numberOfLines={1}>{e.team.name}</Text>
+                </View>
+                <Text style={[styles.rankPts, { color: theme.textSecondary }]}>{e.points} pts</Text>
+              </View>
+            ))}
+          </View>
+
+          {entry.rounds.map((round) => (
+            <View key={round.roundNumber} style={styles.gamesSection}>
+              <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>ROUND {round.roundNumber}</Text>
+              {round.courts.map((court) => {
+                const team1 = entry.teams.find((t: any) => t.id === court.team1Id);
+                const team2 = entry.teams.find((t: any) => t.id === court.team2Id);
+                if (!court.game.completed) return null;
+                const t1Won = (court.game.team1Score ?? 0) > (court.game.team2Score ?? 0);
+                return (
+                  <View key={court.courtNumber} style={[styles.gameResultRow, { borderBottomColor: theme.border }]}>
+                    <Text style={[styles.ladderCourtNum, { color: theme.textSecondary }]}>Ct{court.courtNumber}</Text>
+                    <Text style={[styles.grTeamName, { color: t1Won ? theme.tint : theme.textSecondary, fontFamily: t1Won ? 'Inter_700Bold' : 'Inter_400Regular' }]} numberOfLines={1}>
+                      {team1?.name ?? '?'}
+                    </Text>
+                    <Text style={[styles.grScore, { color: theme.text }]}>{court.game.team1Score}</Text>
+                    <Text style={[styles.grDash, { color: theme.textSecondary }]}>-</Text>
+                    <Text style={[styles.grScore, { color: theme.text }]}>{court.game.team2Score}</Text>
+                    <Text style={[styles.grTeamName, styles.grTeamRight, { color: !t1Won ? theme.tint : theme.textSecondary, fontFamily: !t1Won ? 'Inter_700Bold' : 'Inter_400Regular' }]} numberOfLines={1}>
+                      {team2?.name ?? '?'}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+
+          <View style={styles.teamsSection}>
+            <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>TEAMS</Text>
+            {entry.teams.map((team: any) => (
+              <View key={team.id} style={styles.teamBlock}>
+                <Text style={[styles.teamBlockName, { color: theme.text }]}>{team.name}</Text>
+                <Text style={[styles.teamPlayers, { color: theme.textSecondary }]}>
+                  {team.players.map((p: any) => p.name).join(', ')}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function HistoryScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -349,9 +474,12 @@ export default function HistoryScreen() {
         </View>
       )}
 
-      {reversedHistory.map((entry) => (
-        <WeekCard key={entry.weekNumber} entry={entry} />
-      ))}
+      {reversedHistory.map((entry: any) => {
+        if (entry.format === 'ladder') {
+          return <LadderWeekCard key={entry.weekNumber} entry={entry} />;
+        }
+        return <WeekCard key={entry.weekNumber} entry={entry} />;
+      })}
     </ScrollView>
   );
 }
@@ -461,4 +589,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   addVideoText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  ladderBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginLeft: 8 },
+  ladderBadgeText: { fontSize: 11, fontFamily: 'Inter_700Bold' },
+  ladderCourtNum: { fontSize: 12, fontFamily: 'Inter_600SemiBold', width: 30, marginRight: 4 },
 });
