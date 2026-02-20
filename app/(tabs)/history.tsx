@@ -383,9 +383,7 @@ function LadderWeekCard({ entry }: { entry: LadderHistoryEntry }) {
 
       {expanded && (
         <View style={styles.expandedContent}>
-          {entry.videoUrl && (
-            <VideoSection entry={entry as any} theme={theme} />
-          )}
+          <VideoSection entry={entry as any} theme={theme} />
 
           <View style={[styles.rankingsTable, { borderTopColor: theme.border }]}>
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>FINAL STANDINGS</Text>
