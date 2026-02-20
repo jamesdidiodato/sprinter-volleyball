@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -29,9 +29,17 @@ function GameScoreCard({ game, teams, onSubmit, onUndo, round }: {
   const team1 = teams.find(t => t.id === game.team1Id);
   const team2 = teams.find(t => t.id === game.team2Id);
 
-  const [score1, setScore1] = useState(game.team1Score?.toString() ?? '');
-  const [score2, setScore2] = useState(game.team2Score?.toString() ?? '');
+  const [score1, setScore1] = useState('');
+  const [score2, setScore2] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!game.completed) {
+      setScore1('');
+      setScore2('');
+      setError('');
+    }
+  }, [game.id, game.completed]);
 
   const handleSubmit = () => {
     const s1 = parseInt(score1, 10);
@@ -197,9 +205,17 @@ function LadderCourtCard({ court, teams, onSubmit }: {
 
   const team1 = teams.find((t: any) => t.id === court.team1Id);
   const team2 = teams.find((t: any) => t.id === court.team2Id);
-  const [score1, setScore1] = useState(court.game.team1Score?.toString() ?? '');
-  const [score2, setScore2] = useState(court.game.team2Score?.toString() ?? '');
+  const [score1, setScore1] = useState('');
+  const [score2, setScore2] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!court.game.completed) {
+      setScore1('');
+      setScore2('');
+      setError('');
+    }
+  }, [court.game.id, court.game.completed]);
 
   const handleSubmit = () => {
     const s1 = parseInt(score1, 10);

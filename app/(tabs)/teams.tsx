@@ -95,12 +95,17 @@ export default function TeamsScreen() {
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
-  const { currentWeek, generateNewWeek, swapPlayers, getTeamRankings } = useVolleyball();
+  const { currentWeek, ladderWeek, generateNewWeek, swapPlayers, getTeamRankings, settings } = useVolleyball();
 
   const [editMode, setEditMode] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<{ playerId: string; teamId: string } | null>(null);
   const [showSwapConfirm, setShowSwapConfirm] = useState(false);
   const [pendingSwap, setPendingSwap] = useState<{ p1Id: string; t1Id: string; p2Id: string; t2Id: string; p1Name: string; p2Name: string } | null>(null);
+
+  const isLadder = settings.format === 'ladder';
+  const activeWeek = isLadder ? ladderWeek : currentWeek;
+  const activeTeams = isLadder ? ladderWeek?.teams : currentWeek?.teams;
+  const activeWeekNumber = isLadder ? ladderWeek?.weekNumber : currentWeek?.weekNumber;
 
   const handleGenerate = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -109,8 +114,10 @@ export default function TeamsScreen() {
     generateNewWeek();
   };
 
-  const hasAnyScores = currentWeek?.games.some(g => g.completed) ?? false;
-  const canEdit = !!currentWeek && !hasAnyScores;
+  const hasAnyScores = isLadder
+    ? (ladderWeek?.rounds.some(r => r.courts.some(c => c.game.completed)) ?? false)
+    : (currentWeek?.games.some(g => g.completed) ?? false);
+  const canEdit = !!activeWeek && !hasAnyScores;
 
   const handleToggleEdit = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -138,8 +145,8 @@ export default function TeamsScreen() {
       return;
     }
 
-    const p1 = currentWeek!.teams.find(t => t.id === selectedPlayer.teamId)?.players.find(p => p.id === selectedPlayer.playerId);
-    const p2 = currentWeek!.teams.find(t => t.id === teamId)?.players.find(p => p.id === playerId);
+    const p1 = activeTeams!.find(t => t.id === selectedPlayer.teamId)?.players.find(p => p.id === selectedPlayer.playerId);
+    const p2 = activeTeams!.find(t => t.id === teamId)?.players.find(p => p.id === playerId);
 
     if (p1 && p2) {
       setPendingSwap({
@@ -171,14 +178,18 @@ export default function TeamsScreen() {
   };
 
   const rankings = getTeamRankings();
-  const hasCompletedGames = currentWeek?.games.some(g => g.completed) ?? false;
+  const hasCompletedGames = isLadder
+    ? (ladderWeek?.rounds.some(r => r.courts.some(c => c.game.completed)) ?? false)
+    : (currentWeek?.games.some(g => g.completed) ?? false);
 
-  const phaseLabel = currentWeek ? {
-    roundRobin: 'Round Robin in progress',
-    semifinals: 'Semifinals in progress',
-    finals: 'Finals in progress',
-    complete: 'Week Complete',
-  }[currentWeek.phase] : '';
+  const phaseLabel = isLadder
+    ? (ladderWeek ? (ladderWeek.phase === 'complete' ? 'All Rounds Complete' : `Ladder Round ${ladderWeek.currentRound} of ${ladderWeek.totalRounds}`) : '')
+    : (currentWeek ? {
+        roundRobin: 'Round Robin in progress',
+        semifinals: 'Semifinals in progress',
+        finals: 'Finals in progress',
+        complete: 'Week Complete',
+      }[currentWeek.phase] : '');
 
   return (
     <ScrollView
@@ -188,13 +199,13 @@ export default function TeamsScreen() {
       showsVerticalScrollIndicator={false}
     >
       <Text style={[styles.title, { color: theme.text }]}>Weekly Teams</Text>
-      {currentWeek && (
+      {activeWeek && (
         <View style={styles.weekMeta}>
           <Text style={[styles.weekLabel, { color: theme.tint }]}>
-            Week {currentWeek.weekNumber}
+            Week {activeWeekNumber}
           </Text>
-          <View style={[styles.phasePill, { backgroundColor: currentWeek.phase === 'complete' ? theme.success + '20' : theme.tint + '20' }]}>
-            <Text style={[styles.phaseText, { color: currentWeek.phase === 'complete' ? theme.success : theme.tint }]}>
+          <View style={[styles.phasePill, { backgroundColor: (isLadder ? ladderWeek?.phase === 'complete' : currentWeek?.phase === 'complete') ? theme.success + '20' : theme.tint + '20' }]}>
+            <Text style={[styles.phaseText, { color: (isLadder ? ladderWeek?.phase === 'complete' : currentWeek?.phase === 'complete') ? theme.success : theme.tint }]}>
               {phaseLabel}
             </Text>
           </View>
@@ -211,7 +222,7 @@ export default function TeamsScreen() {
         >
           <Ionicons name="shuffle" size={22} color="#FFF" />
           <Text style={styles.generateText}>
-            {currentWeek ? 'Generate New Week' : 'Generate First Week'}
+            {activeWeek ? 'Generate New Week' : 'Generate First Week'}
           </Text>
         </Pressable>
 
@@ -245,7 +256,7 @@ export default function TeamsScreen() {
         </View>
       )}
 
-      {!currentWeek && (
+      {!activeWeek && (
         <View style={styles.emptyState}>
           <Ionicons name="people-outline" size={48} color={theme.textSecondary} />
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
@@ -254,9 +265,9 @@ export default function TeamsScreen() {
         </View>
       )}
 
-      {currentWeek && (
+      {activeTeams && (
         <View style={styles.teamsGrid}>
-          {currentWeek.teams.map((team, i) => (
+          {activeTeams.map((team, i) => (
             <TeamCard
               key={team.id}
               team={team}
@@ -269,7 +280,7 @@ export default function TeamsScreen() {
         </View>
       )}
 
-      {hasCompletedGames && (
+      {hasCompletedGames && !isLadder && (
         <View style={styles.rankingsSection}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Round Robin Rankings</Text>
           <View style={[styles.rankTable, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -293,7 +304,7 @@ export default function TeamsScreen() {
         </View>
       )}
 
-      {currentWeek && currentWeek.semifinalGames.length > 0 && (
+      {!isLadder && currentWeek && currentWeek.semifinalGames.length > 0 && (
         <View style={styles.rankingsSection}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Semifinal Results</Text>
           {currentWeek.semifinalGames.map(game => {
@@ -325,7 +336,7 @@ export default function TeamsScreen() {
         </View>
       )}
 
-      {currentWeek && currentWeek.finalGames.length > 0 && (
+      {!isLadder && currentWeek && currentWeek.finalGames.length > 0 && (
         <View style={styles.rankingsSection}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Final Results</Text>
           {currentWeek.finalGames.map(game => {
