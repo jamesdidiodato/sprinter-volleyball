@@ -45,6 +45,10 @@ function GameScoreCard({ game, teams, onSubmit, round }: {
       setError('Scores must be positive');
       return;
     }
+    if (s1 > 21 || s2 > 21) {
+      setError('Scores go to 21');
+      return;
+    }
     if (Math.max(s1, s2) < 21) {
       setError('Winner must reach at least 21');
       return;

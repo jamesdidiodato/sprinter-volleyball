@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,17 +7,24 @@ import {
   Pressable,
   useColorScheme,
   Platform,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withDelay } from 'react-native-reanimated';
 import Colors from '@/constants/colors';
-import { useVolleyball, Team } from '@/lib/volleyball-context';
+import { useVolleyball, Team, Player } from '@/lib/volleyball-context';
 
 const POSITION_LABELS: Record<string, string> = { Setter: 'S', Hitter: 'H', Back: 'B' };
 
-function TeamCard({ team, index }: { team: Team; index: number }) {
+function TeamCard({ team, index, editMode, selectedPlayer, onPlayerTap }: {
+  team: Team;
+  index: number;
+  editMode: boolean;
+  selectedPlayer: { playerId: string; teamId: string } | null;
+  onPlayerTap: (playerId: string, teamId: string) => void;
+}) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
@@ -38,21 +45,45 @@ function TeamCard({ team, index }: { team: Team; index: number }) {
   const teamColors = ['#F57C24', '#5C6BC0', '#26A69A', '#EF5350'];
   const accent = teamColors[index % 4];
 
+  const isSelectedTeam = selectedPlayer?.teamId === team.id;
+
   return (
-    <Animated.View style={[styles.teamCard, { backgroundColor: theme.card, borderColor: theme.border }, animStyle]}>
+    <Animated.View style={[styles.teamCard, { backgroundColor: theme.card, borderColor: editMode ? accent + '60' : theme.border }, animStyle]}>
       <View style={[styles.teamHeader, { borderBottomColor: theme.border }]}>
         <View style={[styles.teamDot, { backgroundColor: accent }]} />
         <Text style={[styles.teamName, { color: theme.text }]}>{team.name}</Text>
+        {editMode && (
+          <View style={[styles.editBadge, { backgroundColor: accent + '20' }]}>
+            <Text style={[styles.editBadgeText, { color: accent }]}>Tap to swap</Text>
+          </View>
+        )}
       </View>
       {team.players.map(player => {
         const posColor = theme[player.position.toLowerCase() as 'setter' | 'hitter' | 'back'];
+        const isSelected = selectedPlayer?.playerId === player.id && isSelectedTeam;
+        const isValidTarget = editMode && selectedPlayer && !isSelectedTeam;
+
         return (
-          <View key={player.id} style={styles.playerItem}>
+          <Pressable
+            key={player.id}
+            onPress={() => editMode && onPlayerTap(player.id, team.id)}
+            style={[
+              styles.playerItem,
+              isSelected && { backgroundColor: theme.tint + '20' },
+              isValidTarget && { backgroundColor: accent + '10' },
+            ]}
+          >
             <View style={[styles.miniPosBadge, { backgroundColor: posColor }]}>
               <Text style={styles.miniPosText}>{POSITION_LABELS[player.position]}</Text>
             </View>
             <Text style={[styles.playerItemName, { color: theme.text }]} numberOfLines={1}>{player.name}</Text>
-          </View>
+            {isSelected && (
+              <Ionicons name="checkmark-circle" size={20} color={theme.tint} />
+            )}
+            {isValidTarget && (
+              <Ionicons name="swap-horizontal" size={18} color={accent} />
+            )}
+          </Pressable>
         );
       })}
     </Animated.View>
@@ -64,11 +95,79 @@ export default function TeamsScreen() {
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
-  const { currentWeek, generateNewWeek, getTeamRankings } = useVolleyball();
+  const { currentWeek, generateNewWeek, swapPlayers, getTeamRankings } = useVolleyball();
+
+  const [editMode, setEditMode] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<{ playerId: string; teamId: string } | null>(null);
+  const [showSwapConfirm, setShowSwapConfirm] = useState(false);
+  const [pendingSwap, setPendingSwap] = useState<{ p1Id: string; t1Id: string; p2Id: string; t2Id: string; p1Name: string; p2Name: string } | null>(null);
 
   const handleGenerate = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setEditMode(false);
+    setSelectedPlayer(null);
     generateNewWeek();
+  };
+
+  const hasAnyScores = currentWeek?.games.some(g => g.completed) ?? false;
+  const canEdit = !!currentWeek && !hasAnyScores;
+
+  const handleToggleEdit = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (editMode) {
+      setEditMode(false);
+      setSelectedPlayer(null);
+    } else {
+      setEditMode(true);
+    }
+  };
+
+  const handlePlayerTap = (playerId: string, teamId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!selectedPlayer) {
+      setSelectedPlayer({ playerId, teamId });
+      return;
+    }
+
+    if (selectedPlayer.teamId === teamId) {
+      if (selectedPlayer.playerId === playerId) {
+        setSelectedPlayer(null);
+      } else {
+        setSelectedPlayer({ playerId, teamId });
+      }
+      return;
+    }
+
+    const p1 = currentWeek!.teams.find(t => t.id === selectedPlayer.teamId)?.players.find(p => p.id === selectedPlayer.playerId);
+    const p2 = currentWeek!.teams.find(t => t.id === teamId)?.players.find(p => p.id === playerId);
+
+    if (p1 && p2) {
+      setPendingSwap({
+        p1Id: selectedPlayer.playerId,
+        t1Id: selectedPlayer.teamId,
+        p2Id: playerId,
+        t2Id: teamId,
+        p1Name: p1.name,
+        p2Name: p2.name,
+      });
+      setShowSwapConfirm(true);
+    }
+  };
+
+  const confirmSwap = () => {
+    if (pendingSwap) {
+      swapPlayers(pendingSwap.p1Id, pendingSwap.t1Id, pendingSwap.p2Id, pendingSwap.t2Id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    setShowSwapConfirm(false);
+    setPendingSwap(null);
+    setSelectedPlayer(null);
+  };
+
+  const cancelSwap = () => {
+    setShowSwapConfirm(false);
+    setPendingSwap(null);
+    setSelectedPlayer(null);
   };
 
   const rankings = getTeamRankings();
@@ -102,18 +201,49 @@ export default function TeamsScreen() {
         </View>
       )}
 
-      <Pressable
-        onPress={handleGenerate}
-        style={({ pressed }) => [
-          styles.generateBtn,
-          { backgroundColor: theme.tint, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
-        ]}
-      >
-        <Ionicons name="shuffle" size={22} color="#FFF" />
-        <Text style={styles.generateText}>
-          {currentWeek ? 'Generate New Week' : 'Generate First Week'}
-        </Text>
-      </Pressable>
+      <View style={styles.buttonRow}>
+        <Pressable
+          onPress={handleGenerate}
+          style={({ pressed }) => [
+            styles.generateBtn,
+            { backgroundColor: theme.tint, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }], flex: canEdit ? 1 : undefined, width: canEdit ? undefined : '100%' as any },
+          ]}
+        >
+          <Ionicons name="shuffle" size={22} color="#FFF" />
+          <Text style={styles.generateText}>
+            {currentWeek ? 'Generate New Week' : 'Generate First Week'}
+          </Text>
+        </Pressable>
+
+        {canEdit && (
+          <Pressable
+            onPress={handleToggleEdit}
+            testID="edit-teams-button"
+            style={({ pressed }) => [
+              styles.editBtn,
+              {
+                backgroundColor: editMode ? theme.accent : isDark ? '#2A3A4A' : '#E8E8E8',
+                opacity: pressed ? 0.85 : 1,
+                transform: [{ scale: pressed ? 0.97 : 1 }],
+              },
+            ]}
+          >
+            <Ionicons name={editMode ? 'checkmark' : 'swap-horizontal'} size={20} color={editMode ? (isDark ? '#1B2838' : '#FFF') : theme.text} />
+            <Text style={[styles.editBtnText, { color: editMode ? (isDark ? '#1B2838' : '#FFF') : theme.text }]}>
+              {editMode ? 'Done' : 'Edit'}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+
+      {editMode && (
+        <View style={[styles.editHint, { backgroundColor: theme.tint + '15', borderColor: theme.tint + '30' }]}>
+          <Ionicons name="information-circle" size={18} color={theme.tint} />
+          <Text style={[styles.editHintText, { color: theme.tint }]}>
+            {selectedPlayer ? 'Now tap a player on a different team to swap' : 'Tap a player to select them, then tap a player on another team to swap'}
+          </Text>
+        </View>
+      )}
 
       {!currentWeek && (
         <View style={styles.emptyState}>
@@ -127,7 +257,14 @@ export default function TeamsScreen() {
       {currentWeek && (
         <View style={styles.teamsGrid}>
           {currentWeek.teams.map((team, i) => (
-            <TeamCard key={team.id} team={team} index={i} />
+            <TeamCard
+              key={team.id}
+              team={team}
+              index={i}
+              editMode={editMode}
+              selectedPlayer={selectedPlayer}
+              onPlayerTap={handlePlayerTap}
+            />
           ))}
         </View>
       )}
@@ -220,6 +357,44 @@ export default function TeamsScreen() {
           })}
         </View>
       )}
+
+      <Modal
+        visible={showSwapConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={cancelSwap}
+      >
+        <Pressable style={styles.modalOverlay} onPress={cancelSwap}>
+          <Pressable style={[styles.modalCard, { backgroundColor: isDark ? '#1E2D3D' : '#FFF' }]}>
+            <Ionicons name="swap-horizontal" size={36} color={theme.tint} style={styles.modalIcon} />
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Swap Players?</Text>
+            <Text style={[styles.modalMessage, { color: theme.textSecondary }]}>
+              Swap {pendingSwap?.p1Name} with {pendingSwap?.p2Name}?
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={cancelSwap}
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  { backgroundColor: isDark ? '#2A3A4A' : '#E8E8E8', opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Text style={[styles.modalBtnText, { color: theme.text }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={confirmSwap}
+                testID="confirm-swap-button"
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  { backgroundColor: theme.tint, opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Text style={[styles.modalBtnText, { color: '#FFF' }]}>Swap</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -232,6 +407,7 @@ const styles = StyleSheet.create({
   weekLabel: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
   phasePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   phaseText: { fontSize: 12, fontFamily: 'Inter_700Bold' },
+  buttonRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   generateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -239,9 +415,28 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 16,
     borderRadius: 14,
-    marginBottom: 24,
   },
   generateText: { color: '#FFF', fontSize: 16, fontFamily: 'Inter_700Bold' },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderRadius: 14,
+  },
+  editBtnText: { fontSize: 15, fontFamily: 'Inter_700Bold' },
+  editHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  editHintText: { fontSize: 13, fontFamily: 'Inter_400Regular', flex: 1 },
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyText: { fontSize: 15, fontFamily: 'Inter_400Regular', textAlign: 'center', maxWidth: 240 },
   teamsGrid: { gap: 12 },
@@ -255,7 +450,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   teamDot: { width: 10, height: 10, borderRadius: 5 },
-  teamName: { fontSize: 17, fontFamily: 'Inter_700Bold' },
+  teamName: { fontSize: 17, fontFamily: 'Inter_700Bold', flex: 1 },
+  editBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  editBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold' },
   playerItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 10 },
   miniPosBadge: { width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
   miniPosText: { color: '#FFF', fontSize: 11, fontFamily: 'Inter_700Bold' },
@@ -275,4 +472,29 @@ const styles = StyleSheet.create({
   bracketRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   bracketTeam: { fontSize: 15, fontFamily: 'Inter_600SemiBold', flex: 1 },
   bracketScore: { fontSize: 16, fontFamily: 'Inter_700Bold', width: 40, textAlign: 'right' as const },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 18,
+    padding: 28,
+    alignItems: 'center',
+  },
+  modalIcon: { marginBottom: 12 },
+  modalTitle: { fontSize: 20, fontFamily: 'Inter_700Bold', marginBottom: 8, textAlign: 'center' },
+  modalMessage: { fontSize: 14, fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  modalActions: { flexDirection: 'row', gap: 12, width: '100%' },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalBtnText: { fontSize: 14, fontFamily: 'Inter_700Bold' },
 });

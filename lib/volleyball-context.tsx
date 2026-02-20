@@ -56,6 +56,7 @@ interface VolleyballContextValue {
   isLoading: boolean;
   updatePlayerName: (id: string, name: string) => void;
   generateNewWeek: () => void;
+  swapPlayers: (player1Id: string, team1Id: string, player2Id: string, team2Id: string) => void;
   submitScore: (gameId: string, team1Score: number, team2Score: number, round: 'roundRobin' | 'semifinal' | 'final') => void;
   resetSeason: () => void;
   getTeamRankings: () => Array<{ team: Team; totalPoints: number; wins: number; losses: number; rank: number }>;
@@ -234,6 +235,38 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
       });
 
       return updated;
+    });
+  }, []);
+
+  const swapPlayers = useCallback((player1Id: string, team1Id: string, player2Id: string, team2Id: string) => {
+    setCurrentWeek(prev => {
+      if (!prev) return null;
+      const updatedTeams = prev.teams.map(team => {
+        if (team.id === team1Id) {
+          return {
+            ...team,
+            players: team.players.map(p =>
+              p.id === player1Id
+                ? prev.teams.find(t => t.id === team2Id)!.players.find(p2 => p2.id === player2Id)!
+                : p
+            ),
+          };
+        }
+        if (team.id === team2Id) {
+          return {
+            ...team,
+            players: team.players.map(p =>
+              p.id === player2Id
+                ? prev.teams.find(t => t.id === team1Id)!.players.find(p1 => p1.id === player1Id)!
+                : p
+            ),
+          };
+        }
+        return team;
+      });
+      const updatedWeek = { ...prev, teams: updatedTeams };
+      saveWeek(updatedWeek);
+      return updatedWeek;
     });
   }, []);
 
@@ -461,11 +494,12 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     isLoading,
     updatePlayerName,
     generateNewWeek,
+    swapPlayers,
     submitScore,
     resetSeason,
     getTeamRankings,
     getPlayerStandings,
-  }), [players, currentWeek, history, isLoading, updatePlayerName, generateNewWeek, submitScore, resetSeason, getTeamRankings, getPlayerStandings]);
+  }), [players, currentWeek, history, isLoading, updatePlayerName, generateNewWeek, swapPlayers, submitScore, resetSeason, getTeamRankings, getPlayerStandings]);
 
   return (
     <VolleyballContext.Provider value={value}>
