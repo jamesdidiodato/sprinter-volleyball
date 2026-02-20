@@ -47,6 +47,7 @@ export interface WeekHistoryEntry {
   semifinalGames: Game[];
   finalGames: Game[];
   rankings: Array<{ teamName: string; totalPoints: number; wins: number; losses: number; rank: number }>;
+  videoUrl?: string;
 }
 
 export interface LeagueSettings {
@@ -73,6 +74,7 @@ interface VolleyballContextValue {
   submitScore: (gameId: string, team1Score: number, team2Score: number, round: 'roundRobin' | 'semifinal' | 'final') => void;
   undoScore: (gameId: string, round: 'roundRobin' | 'semifinal' | 'final') => void;
   resetSeason: () => void;
+  updateVideoUrl: (weekNumber: number, videoUrl: string | null) => void;
   getTeamRankings: () => Array<{ team: Team; totalPoints: number; wins: number; losses: number; rank: number }>;
   getPlayerStandings: () => Player[];
   createLeague: (name: string, playersPerTeam?: number, numTeams?: number) => Promise<void>;
@@ -272,6 +274,19 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     }
   }, [league]);
 
+  const updateVideoUrl = useCallback(async (weekNumber: number, videoUrl: string | null) => {
+    if (!league) return;
+    try {
+      const res = await apiRequest('POST', `/api/leagues/${league.id}/history-video`, {
+        weekNumber, videoUrl,
+      });
+      const data = await res.json();
+      setHistory(data.history);
+    } catch (e) {
+      console.error('Update video URL error:', e);
+    }
+  }, [league]);
+
   const getTeamRankings = useCallback(() => {
     if (!currentWeek) return [];
     return getRankingsFromGames(currentWeek.teams, currentWeek.games);
@@ -301,13 +316,14 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     submitScore,
     undoScore,
     resetSeason,
+    updateVideoUrl,
     getTeamRankings,
     getPlayerStandings,
     createLeague,
     joinLeague,
     leaveLeague,
     refreshData,
-  }), [players, currentWeek, history, isLoading, league, settings, updatePlayerName, generateNewWeek, swapPlayers, submitScore, undoScore, resetSeason, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
+  }), [players, currentWeek, history, isLoading, league, settings, updatePlayerName, generateNewWeek, swapPlayers, submitScore, undoScore, resetSeason, updateVideoUrl, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
 
   return (
     <VolleyballContext.Provider value={value}>

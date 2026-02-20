@@ -541,6 +541,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/leagues/:id/history-video", async (req: Request, res: Response) => {
+    try {
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
+      if (!league) return res.status(404).json({ error: "League not found" });
+      const history = (league.history as any[]) || [];
+      const { weekNumber, videoUrl } = req.body;
+
+      const updatedHistory = history.map((entry: any) => {
+        if (entry.weekNumber === weekNumber) {
+          if (videoUrl === null || videoUrl === '') {
+            const { videoUrl: _, ...rest } = entry;
+            return rest;
+          }
+          return { ...entry, videoUrl };
+        }
+        return entry;
+      });
+
+      await storage.updateLeague(league.id, { history: updatedHistory });
+      return res.json({ history: updatedHistory });
+    } catch (e: any) {
+      console.error("Update video URL error:", e);
+      return res.status(500).json({ error: "Failed to update video URL" });
+    }
+  });
+
   app.post("/api/leagues/:id/reset", async (req: Request, res: Response) => {
     try {
       const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
