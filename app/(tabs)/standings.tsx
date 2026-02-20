@@ -16,7 +16,7 @@ import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import Colors from '@/constants/colors';
-import { useVolleyball, Player } from '@/lib/volleyball-context';
+import { useVolleyball, Player, LadderWeekData } from '@/lib/volleyball-context';
 
 type SortKey = 'winPct' | 'wins' | 'losses' | 'name';
 
@@ -25,7 +25,7 @@ export default function StandingsScreen() {
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
-  const { getPlayerStandings, resetSeason } = useVolleyball();
+  const { getPlayerStandings, resetSeason, settings, ladderWeek } = useVolleyball();
   const [sortBy, setSortBy] = useState<SortKey>('winPct');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
@@ -91,6 +91,19 @@ export default function StandingsScreen() {
     { key: 'name', label: 'Name' },
   ];
 
+  const ladderTeamRankings = React.useMemo(() => {
+    if (settings.format !== 'ladder' || !ladderWeek) return [];
+    const entries = Object.entries(ladderWeek.teamPoints)
+      .map(([teamId, points]) => ({
+        team: ladderWeek.teams.find((t: any) => t.id === teamId),
+        points: points as number,
+        teamId,
+      }))
+      .filter(e => e.team)
+      .sort((a, b) => b.points - a.points);
+    return entries;
+  }, [settings.format, ladderWeek]);
+
   const renderHeader = () => (
     <View style={styles.headerContent}>
       <Text style={[styles.title, { color: theme.text }]}>Season Standings</Text>
@@ -118,6 +131,28 @@ export default function StandingsScreen() {
           <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Reset</Text>
         </Pressable>
       </View>
+
+      {settings.format === 'ladder' && ladderTeamRankings.length > 0 && (
+        <View style={styles.ladderSection}>
+          <Text style={[styles.ladderSectionTitle, { color: theme.text }]}>Team Points</Text>
+          <Text style={[styles.ladderSectionSub, { color: theme.textSecondary }]}>
+            Week {ladderWeek?.weekNumber} — Round {ladderWeek?.currentRound} of {ladderWeek?.totalRounds}
+          </Text>
+          {ladderTeamRankings.map((entry, idx) => (
+            <View key={entry.teamId} style={[styles.ladderTeamRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[styles.ladderRank, { color: idx === 0 ? theme.tint : theme.textSecondary }]}>
+                {idx + 1}
+              </Text>
+              <Text style={[styles.ladderTeamName, { color: theme.text }]} numberOfLines={1}>
+                {entry.team?.name ?? '?'}
+              </Text>
+              <Text style={[styles.ladderPoints, { color: theme.tint }]}>
+                {entry.points} pts
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={styles.sortRow}>
         <Text style={[styles.sortLabel, { color: theme.textSecondary }]}>Sort by:</Text>
@@ -293,4 +328,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalBtnText: { fontSize: 14, fontFamily: 'Inter_700Bold' },
+  ladderSection: { marginBottom: 20, gap: 4 },
+  ladderSectionTitle: { fontSize: 18, fontFamily: 'Inter_700Bold' },
+  ladderSectionSub: { fontSize: 13, fontFamily: 'Inter_400Regular', marginBottom: 8 },
+  ladderTeamRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  ladderRank: { fontSize: 16, fontFamily: 'Inter_700Bold', width: 28 },
+  ladderTeamName: { flex: 1, fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+  ladderPoints: { fontSize: 15, fontFamily: 'Inter_700Bold' },
 });
