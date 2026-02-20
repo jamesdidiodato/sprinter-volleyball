@@ -140,7 +140,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
       setCurrentWeek(data.currentWeek || null);
       setHistory(data.history || []);
     } catch (e) {
-      console.error('Failed to fetch league data:', e);
+      console.error('[VB] Failed to fetch league data:', e);
     }
   };
 
