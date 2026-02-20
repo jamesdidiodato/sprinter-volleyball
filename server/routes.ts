@@ -448,6 +448,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/leagues/:id/undo-score", async (req: Request, res: Response) => {
+    try {
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
+      if (!league) return res.status(404).json({ error: "League not found" });
+      const settings = (league.settings as LeagueSettings) || { playersPerTeam: 4, numTeams: 4 };
+      const currentWeek = league.currentWeek as WeekData | null;
+      if (!currentWeek) return res.status(400).json({ error: "No current week" });
+
+      const { gameId, round } = req.body;
+      let updatedWeek = { ...currentWeek };
+      let players = [...(league.players as Player[])];
+
+      const reverseWinLoss = (game: Game) => {
+        if (!game.completed) return;
+        const winnerId = (game.team1Score ?? 0) > (game.team2Score ?? 0) ? game.team1Id : game.team2Id;
+        const loserId = (game.team1Score ?? 0) > (game.team2Score ?? 0) ? game.team2Id : game.team1Id;
+        const winningTeam = currentWeek.teams.find(t => t.id === winnerId);
+        const losingTeam = currentWeek.teams.find(t => t.id === loserId);
+        if (winningTeam && losingTeam) {
+          const winnerIds = new Set(winningTeam.players.map(p => p.id));
+          const loserIds = new Set(losingTeam.players.map(p => p.id));
+          players = players.map(p => {
+            if (winnerIds.has(p.id)) return { ...p, seasonWins: Math.max(0, p.seasonWins - 1) };
+            if (loserIds.has(p.id)) return { ...p, seasonLosses: Math.max(0, p.seasonLosses - 1) };
+            return p;
+          });
+        }
+      };
+
+      if (round === 'roundRobin') {
+        const game = currentWeek.games.find(g => g.id === gameId);
+        if (!game || !game.completed) return res.status(400).json({ error: "Game not found or not completed" });
+        reverseWinLoss(game);
+        updatedWeek.games = currentWeek.games.map(g =>
+          g.id === gameId ? { ...g, team1Score: null, team2Score: null, completed: false } : g
+        );
+        if (updatedWeek.phase !== 'roundRobin') {
+          updatedWeek.semifinalGames.forEach(g => { if (g.completed) reverseWinLoss(g); });
+          updatedWeek.finalGames.forEach(g => { if (g.completed) reverseWinLoss(g); });
+          updatedWeek.semifinalGames = [];
+          updatedWeek.finalGames = [];
+          updatedWeek.phase = 'roundRobin';
+        }
+      } else if (round === 'semifinal') {
+        const game = currentWeek.semifinalGames.find(g => g.id === gameId);
+        if (!game || !game.completed) return res.status(400).json({ error: "Game not found or not completed" });
+        reverseWinLoss(game);
+        updatedWeek.semifinalGames = currentWeek.semifinalGames.map(g =>
+          g.id === gameId ? { ...g, team1Score: null, team2Score: null, completed: false } : g
+        );
+        if (updatedWeek.phase !== 'semifinals') {
+          updatedWeek.finalGames.forEach(g => { if (g.completed) reverseWinLoss(g); });
+          updatedWeek.finalGames = [];
+          updatedWeek.phase = 'semifinals';
+        }
+      } else if (round === 'final') {
+        const game = currentWeek.finalGames.find(g => g.id === gameId);
+        if (!game || !game.completed) return res.status(400).json({ error: "Game not found or not completed" });
+        reverseWinLoss(game);
+        updatedWeek.finalGames = currentWeek.finalGames.map(g =>
+          g.id === gameId ? { ...g, team1Score: null, team2Score: null, completed: false } : g
+        );
+        if (updatedWeek.phase === 'complete') {
+          updatedWeek.phase = 'finals';
+        }
+      }
+
+      await storage.updateLeague(league.id, { currentWeek: updatedWeek, players });
+      return res.json({ currentWeek: updatedWeek, players });
+    } catch (e: any) {
+      console.error("Undo score error:", e);
+      return res.status(500).json({ error: "Failed to undo score" });
+    }
+  });
+
   app.post("/api/leagues/:id/reset", async (req: Request, res: Response) => {
     try {
       const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));

@@ -71,6 +71,7 @@ interface VolleyballContextValue {
   generateNewWeek: () => void;
   swapPlayers: (player1Id: string, team1Id: string, player2Id: string, team2Id: string) => void;
   submitScore: (gameId: string, team1Score: number, team2Score: number, round: 'roundRobin' | 'semifinal' | 'final') => void;
+  undoScore: (gameId: string, round: 'roundRobin' | 'semifinal' | 'final') => void;
   resetSeason: () => void;
   getTeamRankings: () => Array<{ team: Team; totalPoints: number; wins: number; losses: number; rank: number }>;
   getPlayerStandings: () => Player[];
@@ -244,6 +245,20 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     }
   }, [league]);
 
+  const undoScore = useCallback(async (gameId: string, round: 'roundRobin' | 'semifinal' | 'final') => {
+    if (!league) return;
+    try {
+      const res = await apiRequest('POST', `/api/leagues/${league.id}/undo-score`, {
+        gameId, round,
+      });
+      const data = await res.json();
+      setCurrentWeek(data.currentWeek);
+      setPlayers(data.players);
+    } catch (e) {
+      console.error('Undo score error:', e);
+    }
+  }, [league]);
+
   const resetSeason = useCallback(async () => {
     if (!league) return;
     try {
@@ -284,6 +299,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     generateNewWeek,
     swapPlayers,
     submitScore,
+    undoScore,
     resetSeason,
     getTeamRankings,
     getPlayerStandings,
@@ -291,7 +307,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     joinLeague,
     leaveLeague,
     refreshData,
-  }), [players, currentWeek, history, isLoading, league, settings, updatePlayerName, generateNewWeek, swapPlayers, submitScore, resetSeason, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
+  }), [players, currentWeek, history, isLoading, league, settings, updatePlayerName, generateNewWeek, swapPlayers, submitScore, undoScore, resetSeason, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
 
   return (
     <VolleyballContext.Provider value={value}>

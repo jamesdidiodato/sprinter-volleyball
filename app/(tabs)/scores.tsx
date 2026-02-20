@@ -15,10 +15,11 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useVolleyball, Game } from '@/lib/volleyball-context';
 
-function GameScoreCard({ game, teams, onSubmit, round }: {
+function GameScoreCard({ game, teams, onSubmit, onUndo, round }: {
   game: Game;
   teams: any[];
   onSubmit: (gameId: string, s1: number, s2: number, round: 'roundRobin' | 'semifinal' | 'final') => void;
+  onUndo: (gameId: string, round: 'roundRobin' | 'semifinal' | 'final') => void;
   round: 'roundRobin' | 'semifinal' | 'final';
 }) {
   const colorScheme = useColorScheme();
@@ -66,9 +67,21 @@ function GameScoreCard({ game, teams, onSubmit, round }: {
     const t1Won = (game.team1Score ?? 0) > (game.team2Score ?? 0);
     return (
       <View style={[styles.gameCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <View style={styles.completedBadge}>
-          <Ionicons name="checkmark-circle" size={16} color={theme.success} />
-          <Text style={[styles.completedText, { color: theme.success }]}>Final</Text>
+        <View style={styles.completedRow}>
+          <View style={styles.completedBadge}>
+            <Ionicons name="checkmark-circle" size={16} color={theme.success} />
+            <Text style={[styles.completedText, { color: theme.success }]}>Final</Text>
+          </View>
+          <Pressable
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onUndo(game.id, round); }}
+            style={({ pressed }) => [
+              styles.undoBtn,
+              { backgroundColor: theme.border, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Ionicons name="arrow-undo" size={14} color={theme.textSecondary} />
+            <Text style={[styles.undoBtnText, { color: theme.textSecondary }]}>Undo</Text>
+          </Pressable>
         </View>
         <View style={styles.matchupRow}>
           <View style={styles.teamScoreCol}>
@@ -139,12 +152,13 @@ function GameScoreCard({ game, teams, onSubmit, round }: {
   );
 }
 
-function RoundSection({ title, subtitle, games, teams, onSubmit, round, accentColor }: {
+function RoundSection({ title, subtitle, games, teams, onSubmit, onUndo, round, accentColor }: {
   title: string;
   subtitle?: string;
   games: Game[];
   teams: any[];
   onSubmit: (gameId: string, s1: number, s2: number, round: 'roundRobin' | 'semifinal' | 'final') => void;
+  onUndo: (gameId: string, round: 'roundRobin' | 'semifinal' | 'final') => void;
   round: 'roundRobin' | 'semifinal' | 'final';
   accentColor: string;
 }) {
@@ -165,7 +179,7 @@ function RoundSection({ title, subtitle, games, teams, onSubmit, round, accentCo
           <Text style={[styles.gameLabel, { color: theme.textSecondary }]}>
             {game.label ?? `Game ${i + 1}`}
           </Text>
-          <GameScoreCard game={game} teams={teams} onSubmit={onSubmit} round={round} />
+          <GameScoreCard game={game} teams={teams} onSubmit={onSubmit} onUndo={onUndo} round={round} />
         </View>
       ))}
     </View>
@@ -177,7 +191,7 @@ export default function ScoresScreen() {
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
-  const { currentWeek, submitScore } = useVolleyball();
+  const { currentWeek, submitScore, undoScore } = useVolleyball();
 
   if (!currentWeek) {
     return (
@@ -250,6 +264,7 @@ export default function ScoresScreen() {
           games={currentWeek.games}
           teams={currentWeek.teams}
           onSubmit={submitScore}
+          onUndo={undoScore}
           round="roundRobin"
           accentColor={theme.tint}
         />
@@ -261,6 +276,7 @@ export default function ScoresScreen() {
             games={currentWeek.semifinalGames}
             teams={currentWeek.teams}
             onSubmit={submitScore}
+            onUndo={undoScore}
             round="semifinal"
             accentColor={theme.setter}
           />
@@ -273,6 +289,7 @@ export default function ScoresScreen() {
             games={currentWeek.finalGames}
             teams={currentWeek.teams}
             onSubmit={submitScore}
+            onUndo={undoScore}
             round="final"
             accentColor={theme.success}
           />
@@ -336,12 +353,25 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   saveBtnText: { color: '#FFF', fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+  completedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
   completedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 10,
-    alignSelf: 'flex-end',
   },
   completedText: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
+  undoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  undoBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
 });
