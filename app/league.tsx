@@ -17,6 +17,74 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useVolleyball } from '@/lib/volleyball-context';
 
+function NumberStepper({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+  theme,
+  subtitle,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (v: number) => void;
+  theme: any;
+  subtitle?: string;
+}) {
+  return (
+    <View style={[stepperStyles.row, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <View style={stepperStyles.labelCol}>
+        <Text style={[stepperStyles.label, { color: theme.text }]}>{label}</Text>
+        {subtitle ? <Text style={[stepperStyles.subtitle, { color: theme.textSecondary }]}>{subtitle}</Text> : null}
+      </View>
+      <View style={stepperStyles.controls}>
+        <Pressable
+          onPress={() => { if (value > min) { onChange(value - 1); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } }}
+          style={({ pressed }) => [
+            stepperStyles.btn,
+            { backgroundColor: value <= min ? theme.border : theme.tint + '20', opacity: pressed && value > min ? 0.7 : 1 },
+          ]}
+          disabled={value <= min}
+        >
+          <Ionicons name="remove" size={20} color={value <= min ? theme.textSecondary : theme.tint} />
+        </Pressable>
+        <Text style={[stepperStyles.value, { color: theme.text }]}>{value}</Text>
+        <Pressable
+          onPress={() => { if (value < max) { onChange(value + 1); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } }}
+          style={({ pressed }) => [
+            stepperStyles.btn,
+            { backgroundColor: value >= max ? theme.border : theme.tint + '20', opacity: pressed && value < max ? 0.7 : 1 },
+          ]}
+          disabled={value >= max}
+        >
+          <Ionicons name="add" size={20} color={value >= max ? theme.textSecondary : theme.tint} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const stepperStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  labelCol: { flex: 1 },
+  label: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+  subtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 2 },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  btn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  value: { fontSize: 20, fontFamily: 'Inter_700Bold', minWidth: 28, textAlign: 'center' },
+});
+
 export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -26,9 +94,13 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
 
   const [mode, setMode] = useState<'choose' | 'create' | 'join'>('choose');
   const [leagueName, setLeagueName] = useState('');
+  const [playersPerTeam, setPlayersPerTeam] = useState(4);
+  const [numTeams, setNumTeams] = useState(4);
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const totalPlayers = playersPerTeam * numTeams;
 
   const handleCreate = async () => {
     if (!leagueName.trim()) {
@@ -38,7 +110,7 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
     setLoading(true);
     setError('');
     try {
-      await createLeague(leagueName.trim());
+      await createLeague(leagueName.trim(), playersPerTeam, numTeams);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
       setError('Failed to create league. Please try again.');
@@ -165,22 +237,51 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
           </Text>
           <Text style={[styles.formSubtitle, { color: theme.textSecondary }]}>
             {mode === 'create'
-              ? 'Give your league a name. You\'ll get a code to share with your group.'
+              ? 'Set up your league with a name and team configuration.'
               : 'Enter the join code you received from your league organizer.'}
           </Text>
 
           <View style={styles.formContainer}>
             {mode === 'create' ? (
-              <TextInput
-                style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]}
-                value={leagueName}
-                onChangeText={setLeagueName}
-                placeholder="e.g. Thursday Night Volleyball"
-                placeholderTextColor={theme.textSecondary}
-                autoFocus
-                returnKeyType="done"
-                onSubmitEditing={handleCreate}
-              />
+              <>
+                <TextInput
+                  style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]}
+                  value={leagueName}
+                  onChangeText={setLeagueName}
+                  placeholder="League name (e.g. Thursday Night VB)"
+                  placeholderTextColor={theme.textSecondary}
+                  autoFocus
+                  returnKeyType="next"
+                />
+
+                <NumberStepper
+                  label="Players per Team"
+                  subtitle="2 to 6 players"
+                  value={playersPerTeam}
+                  min={2}
+                  max={6}
+                  onChange={setPlayersPerTeam}
+                  theme={theme}
+                />
+
+                <NumberStepper
+                  label="Number of Teams"
+                  subtitle={`${totalPlayers} total players needed`}
+                  value={numTeams}
+                  min={2}
+                  max={12}
+                  onChange={setNumTeams}
+                  theme={theme}
+                />
+
+                <View style={[styles.summaryCard, { backgroundColor: theme.tint + '10', borderColor: theme.tint + '30' }]}>
+                  <Ionicons name="information-circle" size={18} color={theme.tint} />
+                  <Text style={[styles.summaryText, { color: theme.text }]}>
+                    {numTeams} teams of {playersPerTeam} = {totalPlayers} players
+                    {numTeams >= 4 ? ' • Round Robin → Semifinals → Finals' : ' • Round Robin only'}
+                  </Text>
+                </View>
+              </>
             ) : (
               <TextInput
                 style={[styles.input, styles.codeInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]}
@@ -270,6 +371,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 3,
   },
+  summaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  summaryText: { fontSize: 13, fontFamily: 'Inter_400Regular', flex: 1, lineHeight: 18 },
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   errorText: { fontSize: 13, fontFamily: 'Inter_400Regular' },
   submitBtn: {
