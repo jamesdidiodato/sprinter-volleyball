@@ -115,22 +115,40 @@ function generateTeams(players: Player[], settings: LeagueSettings): Team[] {
 }
 
 function generateRoundRobinGames(teams: Team[]): Game[] {
+  const n = teams.length;
+  const fullRounds = n % 2 === 0 ? n - 1 : n;
+  const maxRounds = Math.min(n <= 4 ? fullRounds : 4, fullRounds);
+
+  const teamIndices = teams.map((_, i) => i);
+  if (n % 2 !== 0) {
+    teamIndices.push(-1);
+  }
+  const numSlots = teamIndices.length;
+  const fixed = teamIndices[0];
+  const rotating = teamIndices.slice(1);
+
   const games: Game[] = [];
   let gameNum = 1;
-  for (let i = 0; i < teams.length; i++) {
-    for (let j = i + 1; j < teams.length; j++) {
+
+  for (let round = 0; round < maxRounds; round++) {
+    const currentOrder = [fixed, ...rotating];
+    for (let i = 0; i < numSlots / 2; i++) {
+      const a = currentOrder[i];
+      const b = currentOrder[numSlots - 1 - i];
+      if (a === -1 || b === -1) continue;
       games.push({
         id: randomUUID(),
-        team1Id: teams[i].id,
-        team2Id: teams[j].id,
+        team1Id: teams[a].id,
+        team2Id: teams[b].id,
         team1Score: null,
         team2Score: null,
         completed: false,
         round: 'roundRobin',
-        label: `Game ${gameNum}`,
+        label: `Round ${round + 1} - Game ${gameNum}`,
       });
       gameNum++;
     }
+    rotating.push(rotating.shift()!);
   }
   return games;
 }

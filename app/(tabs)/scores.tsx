@@ -260,7 +260,7 @@ export default function ScoresScreen() {
 
         <RoundSection
           title="Round Robin"
-          subtitle="All teams play each other"
+          subtitle={currentWeek.teams.length > 4 ? `${currentWeek.games.length} games (max 4 rounds)` : "All teams play each other"}
           games={currentWeek.games}
           teams={currentWeek.teams}
           onSubmit={submitScore}
