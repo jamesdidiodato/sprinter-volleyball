@@ -11,6 +11,7 @@ export const leagues = pgTable("leagues", {
   currentWeek: jsonb("current_week"),
   history: jsonb("history").notNull().default(sql`'[]'::jsonb`),
   createdAt: timestamp("created_at").defaultNow(),
+  lastAccessedAt: timestamp("last_accessed_at").defaultNow(),
 });
 
 export const insertLeagueSchema = createInsertSchema(leagues).pick({
