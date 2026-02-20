@@ -210,14 +210,14 @@ export default function ScoresScreen() {
   }[currentWeek.phase];
 
   return (
-      <ScrollView
-        style={[styles.container, { backgroundColor: theme.background }]}
-        contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 + 16 : insets.top + 16, paddingBottom: Platform.OS === 'web' ? 34 + 100 : 350 }]}
-        contentInsetAdjustmentBehavior="automatic"
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-      >
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.background }]}
+      contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 + 16 : insets.top + 16, paddingBottom: Platform.OS === 'web' ? 34 + 100 : 350 }]}
+      contentInsetAdjustmentBehavior="automatic"
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+    >
         <Text style={[styles.title, { color: theme.text }]}>Enter Scores</Text>
         <View style={styles.metaRow}>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
@@ -277,7 +277,7 @@ export default function ScoresScreen() {
             accentColor={theme.success}
           />
         )}
-      </ScrollView>
+    </ScrollView>
   );
 }
 

@@ -12,19 +12,17 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useVolleyball } from '@/lib/volleyball-context';
 
-export default function LeagueScreen() {
+export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
   const { createLeague, joinLeague } = useVolleyball();
-  const router = useRouter();
 
   const [mode, setMode] = useState<'choose' | 'create' | 'join'>('choose');
   const [leagueName, setLeagueName] = useState('');
@@ -121,7 +119,7 @@ export default function LeagueScreen() {
           </View>
 
           <Pressable
-            onPress={() => { router.push('/admin'); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+            onPress={() => { onOpenAdmin?.(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
             style={({ pressed }) => [
               styles.adminBtn,
               { opacity: pressed ? 0.6 : 0.8 },

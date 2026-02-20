@@ -12,7 +12,6 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -28,13 +27,11 @@ interface LeagueSummary {
   lastAccessedAt: string | null;
 }
 
-export default function AdminScreen() {
+export default function AdminScreen({ onBack }: { onBack?: () => void }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
-  const router = useRouter();
-
   const [password, setPassword] = useState('');
   const [authenticated, setAuthenticated] = useState(false);
   const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
@@ -130,7 +127,7 @@ export default function AdminScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Pressable onPress={() => onBack?.()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color={theme.tint} />
             <Text style={[styles.backText, { color: theme.tint }]}>Back</Text>
           </Pressable>
@@ -191,7 +188,7 @@ export default function AdminScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerRow}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Pressable onPress={() => onBack?.()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color={theme.tint} />
             <Text style={[styles.backText, { color: theme.tint }]}>Back</Text>
           </Pressable>
