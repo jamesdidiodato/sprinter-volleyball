@@ -7,12 +7,168 @@ import {
   Pressable,
   useColorScheme,
   Platform,
+  TextInput,
+  Image,
+  Linking,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useVolleyball, WeekHistoryEntry, Game } from '@/lib/volleyball-context';
+
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtube\.com\/embed\/|youtube\.com\/v\/|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+function isValidYouTubeUrl(url: string): boolean {
+  return extractYouTubeId(url) !== null;
+}
+
+function VideoSection({ entry, theme }: { entry: WeekHistoryEntry; theme: any }) {
+  const { updateVideoUrl } = useVolleyball();
+  const [editing, setEditing] = useState(false);
+  const [inputUrl, setInputUrl] = useState('');
+  const [error, setError] = useState('');
+
+  const videoId = entry.videoUrl ? extractYouTubeId(entry.videoUrl) : null;
+  const hasVideo = !!entry.videoUrl && !!videoId;
+
+  const handleSave = () => {
+    if (!inputUrl.trim()) {
+      setError('');
+      setEditing(false);
+      return;
+    }
+    if (!isValidYouTubeUrl(inputUrl.trim())) {
+      setError('Please enter a valid YouTube link.');
+      return;
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    updateVideoUrl(entry.weekNumber, inputUrl.trim());
+    setEditing(false);
+    setError('');
+    setInputUrl('');
+  };
+
+  const handleRemove = () => {
+    if (Platform.OS === 'web') {
+      updateVideoUrl(entry.weekNumber, null);
+    } else {
+      Alert.alert('Remove Video', 'Remove the video link from this week?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            updateVideoUrl(entry.weekNumber, null);
+          },
+        },
+      ]);
+    }
+  };
+
+  const handleWatch = () => {
+    if (entry.videoUrl) {
+      Linking.openURL(entry.videoUrl);
+    }
+  };
+
+  const startEdit = () => {
+    setInputUrl(entry.videoUrl || '');
+    setError('');
+    setEditing(true);
+  };
+
+  if (editing) {
+    return (
+      <View style={styles.videoSection}>
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>GAME VIDEO</Text>
+        <TextInput
+          style={[styles.videoInput, { color: theme.text, borderColor: error ? theme.error : theme.border, backgroundColor: theme.background }]}
+          placeholder="Paste your YouTube game link here..."
+          placeholderTextColor={theme.textSecondary}
+          value={inputUrl}
+          onChangeText={(t) => { setInputUrl(t); setError(''); }}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+        />
+        {!!error && (
+          <Text style={[styles.videoError, { color: theme.error }]}>{error}</Text>
+        )}
+        <View style={styles.videoActions}>
+          <Pressable
+            onPress={() => { setEditing(false); setError(''); }}
+            style={({ pressed }) => [styles.videoActionBtn, { backgroundColor: theme.border, opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Text style={[styles.videoActionText, { color: theme.textSecondary }]}>Cancel</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleSave}
+            style={({ pressed }) => [styles.videoActionBtn, { backgroundColor: theme.tint, opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Ionicons name="checkmark" size={16} color="#FFF" />
+            <Text style={[styles.videoActionText, { color: '#FFF' }]}>Save</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  if (hasVideo) {
+    const thumbUrl = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+    return (
+      <View style={styles.videoSection}>
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>GAME VIDEO</Text>
+        <Pressable onPress={handleWatch} style={({ pressed }) => [styles.thumbnailWrapper, { borderColor: theme.border, opacity: pressed ? 0.85 : 1 }]}>
+          <Image source={{ uri: thumbUrl }} style={styles.thumbnail} resizeMode="cover" />
+          <View style={styles.playOverlay}>
+            <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
+          </View>
+        </Pressable>
+        <View style={styles.videoBottomRow}>
+          <Pressable
+            onPress={handleWatch}
+            style={({ pressed }) => [styles.watchBtn, { backgroundColor: '#FF0000', opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Ionicons name="logo-youtube" size={18} color="#FFF" />
+            <Text style={styles.watchBtnText}>Watch Video</Text>
+          </Pressable>
+          <View style={styles.videoEditActions}>
+            <Pressable onPress={startEdit} style={({ pressed }) => [styles.smallActionBtn, { opacity: pressed ? 0.6 : 1 }]}>
+              <Ionicons name="pencil" size={16} color={theme.textSecondary} />
+            </Pressable>
+            <Pressable onPress={handleRemove} style={({ pressed }) => [styles.smallActionBtn, { opacity: pressed ? 0.6 : 1 }]}>
+              <Ionicons name="trash-outline" size={16} color={theme.error} />
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.videoSection}>
+      <Pressable
+        onPress={startEdit}
+        style={({ pressed }) => [styles.addVideoBtn, { borderColor: theme.border, backgroundColor: theme.background, opacity: pressed ? 0.7 : 1 }]}
+      >
+        <Ionicons name="videocam-outline" size={20} color={theme.textSecondary} />
+        <Text style={[styles.addVideoText, { color: theme.textSecondary }]}>Add Game Video (YouTube Link)</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 function GameResultRow({ game, teams, theme }: { game: Game; teams: any[]; theme: any }) {
   if (!game.completed) return null;
@@ -45,6 +201,7 @@ function WeekCard({ entry }: { entry: WeekHistoryEntry }) {
   const semiGames = entry.semifinalGames.filter(g => g.completed);
   const finalGames = entry.finalGames.filter(g => g.completed);
   const totalGames = rrGames.length + semiGames.length + finalGames.length;
+  const hasVideo = !!entry.videoUrl;
 
   return (
     <View style={[styles.weekCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -53,7 +210,12 @@ function WeekCard({ entry }: { entry: WeekHistoryEntry }) {
         style={styles.weekCardHeader}
       >
         <View style={styles.weekTitleRow}>
-          <Text style={[styles.weekTitle, { color: theme.text }]}>Week {entry.weekNumber}</Text>
+          <View style={styles.weekTitleLine}>
+            <Text style={[styles.weekTitle, { color: theme.text }]}>Week {entry.weekNumber}</Text>
+            {hasVideo && (
+              <Ionicons name="videocam" size={16} color="#FF0000" style={{ marginLeft: 8 }} />
+            )}
+          </View>
           <Text style={[styles.weekGameCount, { color: theme.textSecondary }]}>
             {totalGames} games
           </Text>
@@ -91,6 +253,8 @@ function WeekCard({ entry }: { entry: WeekHistoryEntry }) {
 
       {expanded && (
         <View style={styles.expandedContent}>
+          <VideoSection entry={entry} theme={theme} />
+
           <View style={[styles.rankingsTable, { borderTopColor: theme.border }]}>
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>RANKINGS</Text>
             {entry.rankings.map((r, i) => {
@@ -169,6 +333,7 @@ export default function HistoryScreen() {
       contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 + 16 : insets.top + 16, paddingBottom: Platform.OS === 'web' ? 34 + 100 : 120 }]}
       contentInsetAdjustmentBehavior="automatic"
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
     >
       <Text style={[styles.title, { color: theme.text }]}>History</Text>
       <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
@@ -206,6 +371,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   weekTitleRow: { flex: 1 },
+  weekTitleLine: { flexDirection: 'row', alignItems: 'center' },
   weekTitle: { fontSize: 18, fontFamily: 'Inter_700Bold' },
   weekGameCount: { fontSize: 13, fontFamily: 'Inter_400Regular', marginTop: 2 },
   weekSummary: { paddingHorizontal: 16, paddingBottom: 14, gap: 6 },
@@ -233,4 +399,66 @@ const styles = StyleSheet.create({
   teamBlock: { marginBottom: 10 },
   teamBlockName: { fontSize: 14, fontFamily: 'Inter_700Bold', marginBottom: 2 },
   teamPlayers: { fontSize: 13, fontFamily: 'Inter_400Regular' },
+  videoSection: { marginTop: 4, marginBottom: 4 },
+  videoInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+  },
+  videoError: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 6 },
+  videoActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 10 },
+  videoActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  videoActionText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  thumbnailWrapper: {
+    borderRadius: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  thumbnail: { width: '100%', aspectRatio: 16 / 9 },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  videoBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  watchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 8,
+  },
+  watchBtnText: { color: '#FFF', fontSize: 14, fontFamily: 'Inter_600SemiBold' },
+  videoEditActions: { flexDirection: 'row', gap: 8 },
+  smallActionBtn: { padding: 8 },
+  addVideoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  addVideoText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
 });
