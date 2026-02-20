@@ -476,10 +476,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
       if (!league) return res.status(404).json({ error: "League not found" });
+      const leagueSettings = (league.settings as LeagueSettings) || { playersPerTeam: 4, numTeams: 4, format: 'roundRobin' };
+      const isLadder = leagueSettings.format === 'ladder';
+
+      const { player1Id, team1Id, player2Id, team2Id } = req.body;
+
+      if (isLadder) {
+        const ladderWeek = league.currentWeek as LadderWeekData | null;
+        if (!ladderWeek) return res.status(400).json({ error: "No ladder week active" });
+
+        const swapTeams = (teams: Team[]) => teams.map(team => {
+          if (team.id === team1Id) {
+            return { ...team, players: team.players.map(p =>
+              p.id === player1Id
+                ? teams.find(t => t.id === team2Id)!.players.find(p2 => p2.id === player2Id)!
+                : p
+            )};
+          }
+          if (team.id === team2Id) {
+            return { ...team, players: team.players.map(p =>
+              p.id === player2Id
+                ? teams.find(t => t.id === team1Id)!.players.find(p1 => p1.id === player1Id)!
+                : p
+            )};
+          }
+          return team;
+        });
+
+        const updatedTeams = swapTeams(ladderWeek.teams);
+        const updatedLadder = { ...ladderWeek, teams: updatedTeams };
+        await storage.updateLeague(league.id, { currentWeek: updatedLadder });
+        return res.json({ ladderWeek: updatedLadder });
+      }
+
       const currentWeek = league.currentWeek as WeekData | null;
       if (!currentWeek) return res.status(400).json({ error: "No current week" });
 
-      const { player1Id, team1Id, player2Id, team2Id } = req.body;
       const updatedTeams = currentWeek.teams.map(team => {
         if (team.id === team1Id) {
           return { ...team, players: team.players.map(p =>

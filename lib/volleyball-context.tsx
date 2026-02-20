@@ -262,7 +262,11 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
         player1Id, team1Id, player2Id, team2Id,
       });
       const data = await res.json();
-      setCurrentWeek(data.currentWeek);
+      if (data.ladderWeek) {
+        setLadderWeek(data.ladderWeek);
+      } else {
+        setCurrentWeek(data.currentWeek);
+      }
     } catch (e) {
       console.error('Swap error:', e);
     }
