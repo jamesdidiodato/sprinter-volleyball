@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Crypto from 'expo-crypto';
+import { apiRequest } from './query-client';
 
 export type Position = 'Setter' | 'Hitter' | 'Back';
 
@@ -49,11 +49,18 @@ export interface WeekHistoryEntry {
   rankings: Array<{ teamName: string; totalPoints: number; wins: number; losses: number; rank: number }>;
 }
 
+interface LeagueInfo {
+  id: number;
+  name: string;
+  joinCode: string;
+}
+
 interface VolleyballContextValue {
   players: Player[];
   currentWeek: WeekData | null;
   history: WeekHistoryEntry[];
   isLoading: boolean;
+  league: LeagueInfo | null;
   updatePlayerName: (id: string, name: string) => void;
   generateNewWeek: () => void;
   swapPlayers: (player1Id: string, team1Id: string, player2Id: string, team2Id: string) => void;
@@ -61,88 +68,15 @@ interface VolleyballContextValue {
   resetSeason: () => void;
   getTeamRankings: () => Array<{ team: Team; totalPoints: number; wins: number; losses: number; rank: number }>;
   getPlayerStandings: () => Player[];
+  createLeague: (name: string) => Promise<void>;
+  joinLeague: (code: string) => Promise<void>;
+  leaveLeague: () => void;
+  refreshData: () => Promise<void>;
 }
 
 const VolleyballContext = createContext<VolleyballContextValue | null>(null);
 
-const STORAGE_KEYS = {
-  PLAYERS: 'vb_players',
-  CURRENT_WEEK: 'vb_current_week',
-  HISTORY: 'vb_history',
-};
-
-const DEFAULT_PLAYERS: Player[] = [
-  { id: '1', name: 'Setter 1', position: 'Setter', seasonWins: 0, seasonLosses: 0 },
-  { id: '2', name: 'Setter 2', position: 'Setter', seasonWins: 0, seasonLosses: 0 },
-  { id: '3', name: 'Setter 3', position: 'Setter', seasonWins: 0, seasonLosses: 0 },
-  { id: '4', name: 'Setter 4', position: 'Setter', seasonWins: 0, seasonLosses: 0 },
-  { id: '5', name: 'Hitter 1', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '6', name: 'Hitter 2', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '7', name: 'Hitter 3', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '8', name: 'Hitter 4', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '9', name: 'Hitter 5', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '10', name: 'Hitter 6', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '11', name: 'Hitter 7', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '12', name: 'Hitter 8', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '13', name: 'Back 1', position: 'Back', seasonWins: 0, seasonLosses: 0 },
-  { id: '14', name: 'Back 2', position: 'Back', seasonWins: 0, seasonLosses: 0 },
-  { id: '15', name: 'Back 3', position: 'Back', seasonWins: 0, seasonLosses: 0 },
-  { id: '16', name: 'Back 4', position: 'Back', seasonWins: 0, seasonLosses: 0 },
-];
-
-function shuffle<T>(array: T[]): T[] {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-function generateTeams(players: Player[]): Team[] {
-  const setters = shuffle(players.filter(p => p.position === 'Setter'));
-  const hitters = shuffle(players.filter(p => p.position === 'Hitter'));
-  const backs = shuffle(players.filter(p => p.position === 'Back'));
-
-  const teamNames = ['Team A', 'Team B', 'Team C', 'Team D'];
-  const teams: Team[] = [];
-
-  for (let i = 0; i < 4; i++) {
-    teams.push({
-      id: Crypto.randomUUID(),
-      name: teamNames[i],
-      players: [
-        setters[i],
-        hitters[i * 2],
-        hitters[i * 2 + 1],
-        backs[i],
-      ],
-    });
-  }
-
-  return teams;
-}
-
-function generateRoundRobinGames(teams: Team[]): Game[] {
-  const games: Game[] = [];
-  let gameNum = 1;
-  for (let i = 0; i < teams.length; i++) {
-    for (let j = i + 1; j < teams.length; j++) {
-      games.push({
-        id: Crypto.randomUUID(),
-        team1Id: teams[i].id,
-        team2Id: teams[j].id,
-        team1Score: null,
-        team2Score: null,
-        completed: false,
-        round: 'roundRobin',
-        label: `Game ${gameNum}`,
-      });
-      gameNum++;
-    }
-  }
-  return games;
-}
+const LEAGUE_KEY = 'vb_league_info';
 
 function getRankingsFromGames(teams: Team[], games: Game[]): Array<{ team: Team; totalPoints: number; wins: number; losses: number; rank: number }> {
   const teamStats = teams.map(team => {
@@ -173,303 +107,142 @@ function getRankingsFromGames(teams: Team[], games: Game[]): Array<{ team: Team;
 }
 
 export function VolleyballProvider({ children }: { children: ReactNode }) {
-  const [players, setPlayers] = useState<Player[]>(DEFAULT_PLAYERS);
+  const [players, setPlayers] = useState<Player[]>([]);
   const [currentWeek, setCurrentWeek] = useState<WeekData | null>(null);
   const [history, setHistory] = useState<WeekHistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [league, setLeague] = useState<LeagueInfo | null>(null);
 
   useEffect(() => {
-    loadData();
+    loadLeague();
   }, []);
 
-  const loadData = async () => {
+  const loadLeague = async () => {
     try {
-      const [playersData, weekData, historyData] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.PLAYERS),
-        AsyncStorage.getItem(STORAGE_KEYS.CURRENT_WEEK),
-        AsyncStorage.getItem(STORAGE_KEYS.HISTORY),
-      ]);
-      if (playersData) setPlayers(JSON.parse(playersData));
-      if (weekData) setCurrentWeek(JSON.parse(weekData));
-      if (historyData) setHistory(JSON.parse(historyData));
+      const stored = await AsyncStorage.getItem(LEAGUE_KEY);
+      if (stored) {
+        const leagueInfo: LeagueInfo = JSON.parse(stored);
+        setLeague(leagueInfo);
+        await fetchLeagueData(leagueInfo.id);
+      }
     } catch (e) {
-      console.error('Failed to load data:', e);
+      console.error('Failed to load league:', e);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const savePlayers = async (p: Player[]) => {
-    await AsyncStorage.setItem(STORAGE_KEYS.PLAYERS, JSON.stringify(p));
-  };
-
-  const saveWeek = async (w: WeekData | null) => {
-    if (w) {
-      await AsyncStorage.setItem(STORAGE_KEYS.CURRENT_WEEK, JSON.stringify(w));
-    } else {
-      await AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_WEEK);
+  const fetchLeagueData = async (leagueId: number) => {
+    try {
+      const res = await apiRequest('GET', `/api/leagues/${leagueId}`);
+      const data = await res.json();
+      setPlayers(data.players || []);
+      setCurrentWeek(data.currentWeek || null);
+      setHistory(data.history || []);
+    } catch (e) {
+      console.error('Failed to fetch league data:', e);
     }
   };
 
-  const saveHistory = async (h: WeekHistoryEntry[]) => {
-    await AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(h));
-  };
-
-  const updatePlayerName = useCallback((id: string, name: string) => {
-    setPlayers(prev => {
-      const updated = prev.map(p => p.id === id ? { ...p, name } : p);
-      savePlayers(updated);
-
-      setCurrentWeek(prevWeek => {
-        if (!prevWeek) return null;
-        const updateTeamPlayers = (teams: Team[]) => teams.map(team => ({
-          ...team,
-          players: team.players.map(tp => tp.id === id ? { ...tp, name } : tp),
-        }));
-        const updatedWeek = {
-          ...prevWeek,
-          teams: updateTeamPlayers(prevWeek.teams),
-        };
-        saveWeek(updatedWeek);
-        return updatedWeek;
-      });
-
-      return updated;
-    });
-  }, []);
-
-  const swapPlayers = useCallback((player1Id: string, team1Id: string, player2Id: string, team2Id: string) => {
-    setCurrentWeek(prev => {
-      if (!prev) return null;
-      const updatedTeams = prev.teams.map(team => {
-        if (team.id === team1Id) {
-          return {
-            ...team,
-            players: team.players.map(p =>
-              p.id === player1Id
-                ? prev.teams.find(t => t.id === team2Id)!.players.find(p2 => p2.id === player2Id)!
-                : p
-            ),
-          };
-        }
-        if (team.id === team2Id) {
-          return {
-            ...team,
-            players: team.players.map(p =>
-              p.id === player2Id
-                ? prev.teams.find(t => t.id === team1Id)!.players.find(p1 => p1.id === player1Id)!
-                : p
-            ),
-          };
-        }
-        return team;
-      });
-      const updatedWeek = { ...prev, teams: updatedTeams };
-      saveWeek(updatedWeek);
-      return updatedWeek;
-    });
-  }, []);
-
-  const generateNewWeek = useCallback(() => {
-    if (currentWeek) {
-      const allGames = [...currentWeek.games, ...currentWeek.semifinalGames, ...currentWeek.finalGames];
-      const completedGames = allGames.filter(g => g.completed);
-      if (completedGames.length > 0) {
-        const rankings = getRankingsFromGames(currentWeek.teams, currentWeek.games);
-        const entry: WeekHistoryEntry = {
-          weekNumber: currentWeek.weekNumber,
-          teams: currentWeek.teams,
-          games: currentWeek.games,
-          semifinalGames: currentWeek.semifinalGames,
-          finalGames: currentWeek.finalGames,
-          rankings: rankings.map(r => ({
-            teamName: r.team.name,
-            totalPoints: r.totalPoints,
-            wins: r.wins,
-            losses: r.losses,
-            rank: r.rank,
-          })),
-        };
-        setHistory(prevHistory => {
-          const updated = [...prevHistory, entry];
-          saveHistory(updated);
-          return updated;
-        });
-      }
+  const refreshData = useCallback(async () => {
+    if (league) {
+      await fetchLeagueData(league.id);
     }
+  }, [league]);
 
-    const teams = generateTeams(players);
-    const games = generateRoundRobinGames(teams);
-    const weekNumber = currentWeek ? currentWeek.weekNumber + 1 : 1;
-    const newWeek: WeekData = {
-      teams,
-      games,
-      semifinalGames: [],
-      finalGames: [],
-      weekNumber,
-      phase: 'roundRobin',
-    };
-    setCurrentWeek(newWeek);
-    saveWeek(newWeek);
-  }, [currentWeek, players]);
-
-  const applyWinLoss = useCallback((winnerId: string, loserId: string, teams: Team[]) => {
-    const winningTeam = teams.find(t => t.id === winnerId);
-    const losingTeam = teams.find(t => t.id === loserId);
-
-    if (winningTeam && losingTeam) {
-      setPlayers(prevPlayers => {
-        const winnerIds = new Set(winningTeam.players.map(p => p.id));
-        const loserIds = new Set(losingTeam.players.map(p => p.id));
-        const updated = prevPlayers.map(p => {
-          if (winnerIds.has(p.id)) return { ...p, seasonWins: p.seasonWins + 1 };
-          if (loserIds.has(p.id)) return { ...p, seasonLosses: p.seasonLosses + 1 };
-          return p;
-        });
-        savePlayers(updated);
-        return updated;
-      });
-    }
+  const createLeague = useCallback(async (name: string) => {
+    const res = await apiRequest('POST', '/api/leagues', { name });
+    const data = await res.json();
+    const leagueInfo: LeagueInfo = { id: data.id, name: data.name, joinCode: data.joinCode };
+    setLeague(leagueInfo);
+    await AsyncStorage.setItem(LEAGUE_KEY, JSON.stringify(leagueInfo));
+    await fetchLeagueData(leagueInfo.id);
   }, []);
 
-  const generateSemifinals = useCallback((week: WeekData): Game[] => {
-    const rankings = getRankingsFromGames(week.teams, week.games);
-    const rank1 = rankings.find(r => r.rank === 1)!;
-    const rank2 = rankings.find(r => r.rank === 2)!;
-    const rank3 = rankings.find(r => r.rank === 3)!;
-    const rank4 = rankings.find(r => r.rank === 4)!;
-
-    return [
-      {
-        id: Crypto.randomUUID(),
-        team1Id: rank1.team.id,
-        team2Id: rank4.team.id,
-        team1Score: null,
-        team2Score: null,
-        completed: false,
-        round: 'semifinal' as const,
-        label: `#1 ${rank1.team.name} vs #4 ${rank4.team.name}`,
-      },
-      {
-        id: Crypto.randomUUID(),
-        team1Id: rank2.team.id,
-        team2Id: rank3.team.id,
-        team1Score: null,
-        team2Score: null,
-        completed: false,
-        round: 'semifinal' as const,
-        label: `#2 ${rank2.team.name} vs #3 ${rank3.team.name}`,
-      },
-    ];
+  const joinLeague = useCallback(async (code: string) => {
+    const res = await apiRequest('POST', '/api/leagues/join', { code });
+    const data = await res.json();
+    const leagueInfo: LeagueInfo = { id: data.id, name: data.name, joinCode: data.joinCode };
+    setLeague(leagueInfo);
+    await AsyncStorage.setItem(LEAGUE_KEY, JSON.stringify(leagueInfo));
+    await fetchLeagueData(leagueInfo.id);
   }, []);
 
-  const generateFinals = useCallback((week: WeekData): Game[] => {
-    const semi1 = week.semifinalGames[0];
-    const semi2 = week.semifinalGames[1];
-
-    const winner1Id = (semi1.team1Score ?? 0) > (semi1.team2Score ?? 0) ? semi1.team1Id : semi1.team2Id;
-    const loser1Id = (semi1.team1Score ?? 0) > (semi1.team2Score ?? 0) ? semi1.team2Id : semi1.team1Id;
-    const winner2Id = (semi2.team1Score ?? 0) > (semi2.team2Score ?? 0) ? semi2.team1Id : semi2.team2Id;
-    const loser2Id = (semi2.team1Score ?? 0) > (semi2.team2Score ?? 0) ? semi2.team2Id : semi2.team1Id;
-
-    const getTeamName = (id: string) => week.teams.find(t => t.id === id)?.name ?? '?';
-
-    return [
-      {
-        id: Crypto.randomUUID(),
-        team1Id: winner1Id,
-        team2Id: winner2Id,
-        team1Score: null,
-        team2Score: null,
-        completed: false,
-        round: 'final' as const,
-        label: `Championship: ${getTeamName(winner1Id)} vs ${getTeamName(winner2Id)}`,
-      },
-      {
-        id: Crypto.randomUUID(),
-        team1Id: loser1Id,
-        team2Id: loser2Id,
-        team1Score: null,
-        team2Score: null,
-        completed: false,
-        round: 'final' as const,
-        label: `3rd Place: ${getTeamName(loser1Id)} vs ${getTeamName(loser2Id)}`,
-      },
-    ];
-  }, []);
-
-  const submitScore = useCallback((gameId: string, team1Score: number, team2Score: number, round: 'roundRobin' | 'semifinal' | 'final') => {
-    setCurrentWeek(prev => {
-      if (!prev) return null;
-
-      let updatedWeek = { ...prev };
-
-      if (round === 'roundRobin') {
-        const updatedGames = prev.games.map(g =>
-          g.id === gameId ? { ...g, team1Score, team2Score, completed: true } : g
-        );
-        updatedWeek.games = updatedGames;
-
-        const game = updatedGames.find(g => g.id === gameId)!;
-        const winnerId = team1Score > team2Score ? game.team1Id : game.team2Id;
-        const loserId = team1Score > team2Score ? game.team2Id : game.team1Id;
-        applyWinLoss(winnerId, loserId, prev.teams);
-
-        const allRoundRobinDone = updatedGames.every(g => g.completed);
-        if (allRoundRobinDone) {
-          const semis = generateSemifinals(updatedWeek);
-          updatedWeek.semifinalGames = semis;
-          updatedWeek.phase = 'semifinals';
-        }
-      } else if (round === 'semifinal') {
-        const updatedSemis = prev.semifinalGames.map(g =>
-          g.id === gameId ? { ...g, team1Score, team2Score, completed: true } : g
-        );
-        updatedWeek.semifinalGames = updatedSemis;
-
-        const game = updatedSemis.find(g => g.id === gameId)!;
-        const winnerId = team1Score > team2Score ? game.team1Id : game.team2Id;
-        const loserId = team1Score > team2Score ? game.team2Id : game.team1Id;
-        applyWinLoss(winnerId, loserId, prev.teams);
-
-        const allSemisDone = updatedSemis.every(g => g.completed);
-        if (allSemisDone) {
-          updatedWeek.semifinalGames = updatedSemis;
-          const finals = generateFinals({ ...updatedWeek, semifinalGames: updatedSemis });
-          updatedWeek.finalGames = finals;
-          updatedWeek.phase = 'finals';
-        }
-      } else if (round === 'final') {
-        const updatedFinals = prev.finalGames.map(g =>
-          g.id === gameId ? { ...g, team1Score, team2Score, completed: true } : g
-        );
-        updatedWeek.finalGames = updatedFinals;
-
-        const game = updatedFinals.find(g => g.id === gameId)!;
-        const winnerId = team1Score > team2Score ? game.team1Id : game.team2Id;
-        const loserId = team1Score > team2Score ? game.team2Id : game.team1Id;
-        applyWinLoss(winnerId, loserId, prev.teams);
-
-        const allFinalsDone = updatedFinals.every(g => g.completed);
-        if (allFinalsDone) {
-          updatedWeek.phase = 'complete';
-        }
-      }
-
-      saveWeek(updatedWeek);
-      return updatedWeek;
-    });
-  }, [applyWinLoss, generateSemifinals, generateFinals]);
-
-  const resetSeason = useCallback(() => {
-    const resetPlayers = players.map(p => ({ ...p, seasonWins: 0, seasonLosses: 0 }));
-    setPlayers(resetPlayers);
+  const leaveLeague = useCallback(() => {
+    setLeague(null);
+    setPlayers([]);
     setCurrentWeek(null);
     setHistory([]);
-    savePlayers(resetPlayers);
-    saveWeek(null);
-    saveHistory([]);
-  }, [players]);
+    AsyncStorage.removeItem(LEAGUE_KEY);
+  }, []);
+
+  const updatePlayerName = useCallback((id: string, name: string) => {
+    if (!league) return;
+    setPlayers(prev => prev.map(p => p.id === id ? { ...p, name } : p));
+    setCurrentWeek(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        teams: prev.teams.map(team => ({
+          ...team,
+          players: team.players.map(tp => tp.id === id ? { ...tp, name } : tp),
+        })),
+      };
+    });
+    apiRequest('PUT', `/api/leagues/${league.id}/players/${id}`, { name }).catch(console.error);
+  }, [league]);
+
+  const generateNewWeek = useCallback(async () => {
+    if (!league) return;
+    try {
+      const res = await apiRequest('POST', `/api/leagues/${league.id}/generate-week`);
+      const data = await res.json();
+      setCurrentWeek(data.currentWeek);
+      setHistory(data.history);
+    } catch (e) {
+      console.error('Generate week error:', e);
+    }
+  }, [league]);
+
+  const swapPlayers = useCallback(async (player1Id: string, team1Id: string, player2Id: string, team2Id: string) => {
+    if (!league) return;
+    try {
+      const res = await apiRequest('POST', `/api/leagues/${league.id}/swap-players`, {
+        player1Id, team1Id, player2Id, team2Id,
+      });
+      const data = await res.json();
+      setCurrentWeek(data.currentWeek);
+    } catch (e) {
+      console.error('Swap error:', e);
+    }
+  }, [league]);
+
+  const submitScore = useCallback(async (gameId: string, team1Score: number, team2Score: number, round: 'roundRobin' | 'semifinal' | 'final') => {
+    if (!league) return;
+    try {
+      const res = await apiRequest('POST', `/api/leagues/${league.id}/submit-score`, {
+        gameId, team1Score, team2Score, round,
+      });
+      const data = await res.json();
+      setCurrentWeek(data.currentWeek);
+      setPlayers(data.players);
+    } catch (e) {
+      console.error('Submit score error:', e);
+    }
+  }, [league]);
+
+  const resetSeason = useCallback(async () => {
+    if (!league) return;
+    try {
+      const res = await apiRequest('POST', `/api/leagues/${league.id}/reset`);
+      const data = await res.json();
+      setPlayers(data.players);
+      setCurrentWeek(null);
+      setHistory([]);
+    } catch (e) {
+      console.error('Reset error:', e);
+    }
+  }, [league]);
 
   const getTeamRankings = useCallback(() => {
     if (!currentWeek) return [];
@@ -492,6 +265,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     currentWeek,
     history,
     isLoading,
+    league,
     updatePlayerName,
     generateNewWeek,
     swapPlayers,
@@ -499,7 +273,11 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     resetSeason,
     getTeamRankings,
     getPlayerStandings,
-  }), [players, currentWeek, history, isLoading, updatePlayerName, generateNewWeek, swapPlayers, submitScore, resetSeason, getTeamRankings, getPlayerStandings]);
+    createLeague,
+    joinLeague,
+    leaveLeague,
+    refreshData,
+  }), [players, currentWeek, history, isLoading, league, updatePlayerName, generateNewWeek, swapPlayers, submitScore, resetSeason, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
 
   return (
     <VolleyballContext.Provider value={value}>

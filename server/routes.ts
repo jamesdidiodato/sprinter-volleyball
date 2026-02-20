@@ -150,6 +150,11 @@ function generateFinals(week: WeekData): Game[] {
   ];
 }
 
+function getParamId(params: Record<string, string | string[]>, key: string): string {
+  const val = params[key];
+  return Array.isArray(val) ? val[0] : val;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/leagues", async (req: Request, res: Response) => {
     try {
@@ -190,7 +195,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/leagues/:id", async (req: Request, res: Response) => {
     try {
-      const league = await storage.getLeague(parseInt(req.params.id));
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
       if (!league) return res.status(404).json({ error: "League not found" });
       return res.json({
         id: league.id,
@@ -208,11 +213,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/leagues/:id/players/:playerId", async (req: Request, res: Response) => {
     try {
-      const league = await storage.getLeague(parseInt(req.params.id));
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
       if (!league) return res.status(404).json({ error: "League not found" });
       const { name } = req.body;
       const players = (league.players as Player[]).map(p =>
-        p.id === req.params.playerId ? { ...p, name } : p
+        p.id === getParamId(req.params, 'playerId') ? { ...p, name } : p
       );
       const currentWeek = league.currentWeek as WeekData | null;
       let updatedWeek = currentWeek;
@@ -221,7 +226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ...currentWeek,
           teams: currentWeek.teams.map(team => ({
             ...team,
-            players: team.players.map(tp => tp.id === req.params.playerId ? { ...tp, name } : tp),
+            players: team.players.map(tp => tp.id === getParamId(req.params, 'playerId') ? { ...tp, name } : tp),
           })),
         };
       }
@@ -235,7 +240,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/leagues/:id/generate-week", async (req: Request, res: Response) => {
     try {
-      const league = await storage.getLeague(parseInt(req.params.id));
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
       if (!league) return res.status(404).json({ error: "League not found" });
       const players = league.players as Player[];
       const currentWeek = league.currentWeek as WeekData | null;
@@ -278,7 +283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/leagues/:id/swap-players", async (req: Request, res: Response) => {
     try {
-      const league = await storage.getLeague(parseInt(req.params.id));
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
       if (!league) return res.status(404).json({ error: "League not found" });
       const currentWeek = league.currentWeek as WeekData | null;
       if (!currentWeek) return res.status(400).json({ error: "No current week" });
@@ -313,7 +318,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/leagues/:id/submit-score", async (req: Request, res: Response) => {
     try {
-      const league = await storage.getLeague(parseInt(req.params.id));
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
       if (!league) return res.status(404).json({ error: "League not found" });
       const currentWeek = league.currentWeek as WeekData | null;
       if (!currentWeek) return res.status(400).json({ error: "No current week" });
@@ -394,7 +399,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/leagues/:id/reset", async (req: Request, res: Response) => {
     try {
-      const league = await storage.getLeague(parseInt(req.params.id));
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
       if (!league) return res.status(404).json({ error: "League not found" });
       const players = (league.players as Player[]).map(p => ({ ...p, seasonWins: 0, seasonLosses: 0 }));
       await storage.updateLeague(league.id, { players, currentWeek: null, history: [] });

@@ -8,7 +8,8 @@ import {
   TextInput,
   useColorScheme,
   Platform,
-  Alert,
+  Modal,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -79,16 +80,51 @@ export default function PlayersScreen() {
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
-  const { players, updatePlayerName } = useVolleyball();
+  const { players, updatePlayerName, league, leaveLeague, refreshData } = useVolleyball();
 
   const [filter, setFilter] = useState<Position | 'All'>('All');
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshData();
+    setRefreshing(false);
+  }, [refreshData]);
 
   const filtered = filter === 'All' ? players : players.filter(p => p.position === filter);
 
   const positions: Array<Position | 'All'> = ['All', 'Setter', 'Hitter', 'Back'];
 
+  const handleLeave = () => {
+    leaveLeague();
+    setShowLeaveConfirm(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  };
+
   const renderHeader = () => (
     <View style={styles.headerContent}>
+      {league && (
+        <View style={[styles.leagueBar, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={styles.leagueInfo}>
+            <Text style={[styles.leagueName, { color: theme.text }]}>{league.name}</Text>
+            <View style={styles.codeRow}>
+              <Text style={[styles.codeLabel, { color: theme.textSecondary }]}>Code: </Text>
+              <Text style={[styles.codeValue, { color: theme.tint }]}>{league.joinCode}</Text>
+            </View>
+          </View>
+          <Pressable
+            onPress={() => setShowLeaveConfirm(true)}
+            style={({ pressed }) => [
+              styles.leaveBtn,
+              { backgroundColor: isDark ? '#2A3A4A' : '#E8E8E8', opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            <Ionicons name="log-out-outline" size={16} color={theme.textSecondary} />
+          </Pressable>
+        </View>
+      )}
+
       <Text style={[styles.title, { color: theme.text }]}>Players</Text>
       <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
         {players.length} players registered
@@ -125,7 +161,47 @@ export default function PlayersScreen() {
         contentInsetAdjustmentBehavior="automatic"
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.tint} />
+        }
       />
+
+      <Modal
+        visible={showLeaveConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLeaveConfirm(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowLeaveConfirm(false)}>
+          <Pressable style={[styles.modalCard, { backgroundColor: isDark ? '#1E2D3D' : '#FFF' }]}>
+            <Ionicons name="log-out-outline" size={36} color={theme.error} style={{ marginBottom: 12 }} />
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Leave League?</Text>
+            <Text style={[styles.modalMessage, { color: theme.textSecondary }]}>
+              You can rejoin later with the code: {league?.joinCode}
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setShowLeaveConfirm(false)}
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  { backgroundColor: isDark ? '#2A3A4A' : '#E8E8E8', opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Text style={[styles.modalBtnText, { color: theme.text }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleLeave}
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  { backgroundColor: theme.error, opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Text style={[styles.modalBtnText, { color: '#FFF' }]}>Leave</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -134,6 +210,26 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { paddingHorizontal: 16, paddingBottom: 120 },
   headerContent: { marginBottom: 16 },
+  leagueBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  leagueInfo: { flex: 1 },
+  leagueName: { fontSize: 16, fontFamily: 'Inter_700Bold' },
+  codeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  codeLabel: { fontSize: 12, fontFamily: 'Inter_400Regular' },
+  codeValue: { fontSize: 13, fontFamily: 'Inter_700Bold', letterSpacing: 1 },
+  leaveBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', marginBottom: 4 },
   subtitle: { fontSize: 14, fontFamily: 'Inter_400Regular', marginBottom: 16 },
   filterRow: { flexDirection: 'row', gap: 8 },
@@ -174,4 +270,28 @@ const styles = StyleSheet.create({
   },
   statsCol: { flexDirection: 'row', gap: 8 },
   statValue: { fontSize: 14, fontFamily: 'Inter_700Bold' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 18,
+    padding: 28,
+    alignItems: 'center',
+  },
+  modalTitle: { fontSize: 20, fontFamily: 'Inter_700Bold', marginBottom: 8, textAlign: 'center' },
+  modalMessage: { fontSize: 14, fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  modalActions: { flexDirection: 'row', gap: 12, width: '100%' },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalBtnText: { fontSize: 14, fontFamily: 'Inter_700Bold' },
 });
