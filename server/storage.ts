@@ -5,23 +5,24 @@ import { leagues, type League, type InsertLeague } from "@shared/schema";
 const db = drizzle(process.env.DATABASE_URL!);
 
 export interface IStorage {
-  createLeague(data: InsertLeague & { players: any[] }): Promise<League>;
+  createLeague(data: InsertLeague & { players: any[]; settings?: any }): Promise<League>;
   getLeagueByCode(joinCode: string): Promise<League | undefined>;
   getLeague(id: number): Promise<League | undefined>;
-  updateLeague(id: number, data: Partial<{ players: any; currentWeek: any; history: any }>): Promise<League | undefined>;
+  updateLeague(id: number, data: Partial<{ players: any; currentWeek: any; history: any; settings: any }>): Promise<League | undefined>;
   getAllLeagues(): Promise<League[]>;
   deleteLeague(id: number): Promise<boolean>;
   touchLeague(id: number): Promise<void>;
 }
 
 class DatabaseStorage implements IStorage {
-  async createLeague(data: InsertLeague & { players: any[] }): Promise<League> {
+  async createLeague(data: InsertLeague & { players: any[]; settings?: any }): Promise<League> {
     const [league] = await db.insert(leagues).values({
       name: data.name,
       joinCode: data.joinCode,
       players: data.players,
       currentWeek: null,
       history: [],
+      settings: data.settings || { playersPerTeam: 4, numTeams: 4 },
     }).returning();
     return league;
   }

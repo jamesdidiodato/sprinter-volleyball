@@ -39,24 +39,37 @@ interface WeekData {
   phase: 'roundRobin' | 'semifinals' | 'finals' | 'complete';
 }
 
-const DEFAULT_PLAYERS: Player[] = [
-  { id: '1', name: 'Setter 1', position: 'Setter', seasonWins: 0, seasonLosses: 0 },
-  { id: '2', name: 'Setter 2', position: 'Setter', seasonWins: 0, seasonLosses: 0 },
-  { id: '3', name: 'Setter 3', position: 'Setter', seasonWins: 0, seasonLosses: 0 },
-  { id: '4', name: 'Setter 4', position: 'Setter', seasonWins: 0, seasonLosses: 0 },
-  { id: '5', name: 'Hitter 1', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '6', name: 'Hitter 2', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '7', name: 'Hitter 3', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '8', name: 'Hitter 4', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '9', name: 'Hitter 5', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '10', name: 'Hitter 6', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '11', name: 'Hitter 7', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '12', name: 'Hitter 8', position: 'Hitter', seasonWins: 0, seasonLosses: 0 },
-  { id: '13', name: 'Back 1', position: 'Back', seasonWins: 0, seasonLosses: 0 },
-  { id: '14', name: 'Back 2', position: 'Back', seasonWins: 0, seasonLosses: 0 },
-  { id: '15', name: 'Back 3', position: 'Back', seasonWins: 0, seasonLosses: 0 },
-  { id: '16', name: 'Back 4', position: 'Back', seasonWins: 0, seasonLosses: 0 },
-];
+interface LeagueSettings {
+  playersPerTeam: number;
+  numTeams: number;
+}
+
+function getPositionDistribution(playersPerTeam: number): { setters: number; hitters: number; backs: number } {
+  if (playersPerTeam === 2) return { setters: 1, hitters: 1, backs: 0 };
+  if (playersPerTeam === 3) return { setters: 1, hitters: 1, backs: 1 };
+  if (playersPerTeam === 4) return { setters: 1, hitters: 2, backs: 1 };
+  if (playersPerTeam === 5) return { setters: 1, hitters: 2, backs: 2 };
+  return { setters: 1, hitters: 3, backs: 2 };
+}
+
+function generateDefaultPlayers(settings: LeagueSettings): Player[] {
+  const dist = getPositionDistribution(settings.playersPerTeam);
+  const totalSetters = dist.setters * settings.numTeams;
+  const totalHitters = dist.hitters * settings.numTeams;
+  const totalBacks = dist.backs * settings.numTeams;
+  const players: Player[] = [];
+  let id = 1;
+  for (let i = 0; i < totalSetters; i++) {
+    players.push({ id: String(id++), name: `Setter ${i + 1}`, position: 'Setter', seasonWins: 0, seasonLosses: 0 });
+  }
+  for (let i = 0; i < totalHitters; i++) {
+    players.push({ id: String(id++), name: `Hitter ${i + 1}`, position: 'Hitter', seasonWins: 0, seasonLosses: 0 });
+  }
+  for (let i = 0; i < totalBacks; i++) {
+    players.push({ id: String(id++), name: `Back ${i + 1}`, position: 'Back', seasonWins: 0, seasonLosses: 0 });
+  }
+  return players;
+}
 
 function shuffle<T>(array: T[]): T[] {
   const arr = [...array];
@@ -67,17 +80,31 @@ function shuffle<T>(array: T[]): T[] {
   return arr;
 }
 
-function generateTeams(players: Player[]): Team[] {
+const TEAM_NAMES = ['Team A', 'Team B', 'Team C', 'Team D', 'Team E', 'Team F', 'Team G', 'Team H',
+  'Team I', 'Team J', 'Team K', 'Team L'];
+
+function generateTeams(players: Player[], settings: LeagueSettings): Team[] {
+  const dist = getPositionDistribution(settings.playersPerTeam);
   const setters = shuffle(players.filter(p => p.position === 'Setter'));
   const hitters = shuffle(players.filter(p => p.position === 'Hitter'));
   const backs = shuffle(players.filter(p => p.position === 'Back'));
-  const teamNames = ['Team A', 'Team B', 'Team C', 'Team D'];
+
   const teams: Team[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < settings.numTeams; i++) {
+    const teamPlayers: Player[] = [];
+    for (let s = 0; s < dist.setters; s++) {
+      teamPlayers.push(setters[i * dist.setters + s]);
+    }
+    for (let h = 0; h < dist.hitters; h++) {
+      teamPlayers.push(hitters[i * dist.hitters + h]);
+    }
+    for (let b = 0; b < dist.backs; b++) {
+      teamPlayers.push(backs[i * dist.backs + b]);
+    }
     teams.push({
       id: randomUUID(),
-      name: teamNames[i],
-      players: [setters[i], hitters[i * 2], hitters[i * 2 + 1], backs[i]],
+      name: TEAM_NAMES[i] || `Team ${i + 1}`,
+      players: teamPlayers,
     });
   }
   return teams;
@@ -124,6 +151,10 @@ function getRankingsFromGames(teams: Team[], games: Game[]) {
   return teamStats;
 }
 
+function hasSemifinals(numTeams: number): boolean {
+  return numTeams >= 4;
+}
+
 function generateSemifinals(week: WeekData): Game[] {
   const rankings = getRankingsFromGames(week.teams, week.games);
   const rank1 = rankings.find(r => r.rank === 1)!;
@@ -158,18 +189,25 @@ function getParamId(params: Record<string, string | string[]>, key: string): str
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/leagues", async (req: Request, res: Response) => {
     try {
-      const { name } = req.body;
+      const { name, playersPerTeam, numTeams } = req.body;
       if (!name || typeof name !== 'string' || name.trim().length === 0) {
         return res.status(400).json({ error: "League name is required" });
       }
+      const ppt = typeof playersPerTeam === 'number' ? Math.min(6, Math.max(2, Math.round(playersPerTeam))) : 4;
+      const nt = typeof numTeams === 'number' ? Math.max(2, Math.round(numTeams)) : 4;
+
+      const settings: LeagueSettings = { playersPerTeam: ppt, numTeams: nt };
+      const players = generateDefaultPlayers(settings);
+
       const code = name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) +
         Math.random().toString(36).substring(2, 6).toUpperCase();
       const league = await storage.createLeague({
         name: name.trim(),
         joinCode: code,
-        players: DEFAULT_PLAYERS,
+        players,
+        settings,
       });
-      return res.json({ id: league.id, name: league.name, joinCode: league.joinCode });
+      return res.json({ id: league.id, name: league.name, joinCode: league.joinCode, settings });
     } catch (e: any) {
       console.error("Create league error:", e);
       return res.status(500).json({ error: "Failed to create league" });
@@ -206,6 +244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         players: league.players,
         currentWeek: league.currentWeek,
         history: league.history,
+        settings: league.settings || { playersPerTeam: 4, numTeams: 4 },
       });
     } catch (e: any) {
       console.error("Get league error:", e);
@@ -245,6 +284,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
       if (!league) return res.status(404).json({ error: "League not found" });
       const players = league.players as Player[];
+      const settings = (league.settings as LeagueSettings) || { playersPerTeam: 4, numTeams: 4 };
       const currentWeek = league.currentWeek as WeekData | null;
       let history = (league.history as any[]) || [];
 
@@ -270,7 +310,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const teams = generateTeams(players);
+      const teams = generateTeams(players, settings);
       const games = generateRoundRobinGames(teams);
       const weekNumber = currentWeek ? currentWeek.weekNumber + 1 : 1;
       const newWeek: WeekData = { teams, games, semifinalGames: [], finalGames: [], weekNumber, phase: 'roundRobin' };
@@ -322,6 +362,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
       if (!league) return res.status(404).json({ error: "League not found" });
+      const settings = (league.settings as LeagueSettings) || { playersPerTeam: 4, numTeams: 4 };
       const currentWeek = league.currentWeek as WeekData | null;
       if (!currentWeek) return res.status(400).json({ error: "No current week" });
 
@@ -363,8 +404,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const loserId = team1Score > team2Score ? game.team2Id : game.team1Id;
         applyWinLoss(winnerId, loserId);
         if (updatedWeek.games.every(g => g.completed)) {
-          updatedWeek.semifinalGames = generateSemifinals(updatedWeek);
-          updatedWeek.phase = 'semifinals';
+          if (hasSemifinals(settings.numTeams)) {
+            updatedWeek.semifinalGames = generateSemifinals(updatedWeek);
+            updatedWeek.phase = 'semifinals';
+          } else {
+            updatedWeek.phase = 'complete';
+          }
         }
       } else if (round === 'semifinal') {
         updatedWeek.semifinalGames = currentWeek.semifinalGames.map(g =>
@@ -437,6 +482,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         joinCode: l.joinCode,
         playerCount: Array.isArray(l.players) ? (l.players as any[]).length : 0,
         weeksPlayed: Array.isArray(l.history) ? (l.history as any[]).length : 0,
+        settings: l.settings || { playersPerTeam: 4, numTeams: 4 },
         createdAt: l.createdAt,
         lastAccessedAt: l.lastAccessedAt,
       }));
