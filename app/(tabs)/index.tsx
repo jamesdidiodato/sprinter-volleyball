@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useVolleyball, Position } from '@/lib/volleyball-context';
@@ -85,6 +86,16 @@ export default function PlayersScreen() {
   const [filter, setFilter] = useState<Position | 'All'>('All');
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyCode = async () => {
+    if (league?.joinCode) {
+      await Clipboard.setStringAsync(league.joinCode);
+      setCopied(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -111,17 +122,20 @@ export default function PlayersScreen() {
             <View style={styles.codeRow}>
               <Text style={[styles.codeLabel, { color: theme.textSecondary }]}>Code: </Text>
               <Text style={[styles.codeValue, { color: theme.tint }]}>{league.joinCode}</Text>
+              <Pressable
+                onPress={handleCopyCode}
+                style={({ pressed }) => [
+                  styles.copyBtn,
+                  { backgroundColor: copied ? theme.success + '20' : theme.tint + '15', opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={14} color={copied ? theme.success : theme.tint} />
+                <Text style={[styles.copyBtnText, { color: copied ? theme.success : theme.tint }]}>
+                  {copied ? 'Copied!' : 'Copy'}
+                </Text>
+              </Pressable>
             </View>
           </View>
-          <Pressable
-            onPress={() => setShowLeaveConfirm(true)}
-            style={({ pressed }) => [
-              styles.leaveBtn,
-              { backgroundColor: isDark ? '#2A3A4A' : '#E8E8E8', opacity: pressed ? 0.8 : 1 },
-            ]}
-          >
-            <Ionicons name="log-out-outline" size={16} color={theme.textSecondary} />
-          </Pressable>
         </View>
       )}
 
@@ -151,6 +165,21 @@ export default function PlayersScreen() {
     </View>
   );
 
+  const renderFooter = () => (
+    <View style={styles.footerContent}>
+      <Pressable
+        onPress={() => { setShowLeaveConfirm(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }}
+        style={({ pressed }) => [
+          styles.leaveLeagueBtn,
+          { borderColor: theme.error, opacity: pressed ? 0.7 : 1 },
+        ]}
+      >
+        <Ionicons name="log-out-outline" size={18} color={theme.error} />
+        <Text style={[styles.leaveLeagueBtnText, { color: theme.error }]}>Leave League</Text>
+      </Pressable>
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <FlatList
@@ -160,6 +189,7 @@ export default function PlayersScreen() {
         contentContainerStyle={[styles.list, { paddingTop: Platform.OS === 'web' ? 67 + 16 : insets.top + 16 }]}
         contentInsetAdjustmentBehavior="automatic"
         ListHeaderComponent={renderHeader}
+        ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.tint} />
@@ -223,13 +253,16 @@ const styles = StyleSheet.create({
   codeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
   codeLabel: { fontSize: 12, fontFamily: 'Inter_400Regular' },
   codeValue: { fontSize: 13, fontFamily: 'Inter_700Bold', letterSpacing: 1 },
-  leaveBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
+  copyBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
+  copyBtnText: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', marginBottom: 4 },
   subtitle: { fontSize: 14, fontFamily: 'Inter_400Regular', marginBottom: 16 },
   filterRow: { flexDirection: 'row', gap: 8 },
@@ -294,4 +327,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalBtnText: { fontSize: 14, fontFamily: 'Inter_700Bold' },
+  footerContent: { marginTop: 24, marginBottom: 20, alignItems: 'center' },
+  leaveLeagueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  leaveLeagueBtnText: { fontSize: 15, fontFamily: 'Inter_700Bold' },
 });
