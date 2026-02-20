@@ -8,7 +8,6 @@ import {
   TextInput,
   useColorScheme,
   Platform,
-  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -211,17 +210,13 @@ export default function ScoresScreen() {
   }[currentWeek.phase];
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={90}
-    >
       <ScrollView
         style={[styles.container, { backgroundColor: theme.background }]}
         contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 + 16 : insets.top + 16, paddingBottom: Platform.OS === 'web' ? 34 + 100 : 120 }]}
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
       >
         <Text style={[styles.title, { color: theme.text }]}>Enter Scores</Text>
         <View style={styles.metaRow}>
@@ -283,7 +278,6 @@ export default function ScoresScreen() {
           />
         )}
       </ScrollView>
-    </KeyboardAvoidingView>
   );
 }
 

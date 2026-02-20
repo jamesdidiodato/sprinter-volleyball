@@ -201,12 +201,12 @@ export default function TeamsScreen() {
         </View>
       )}
 
-      <View style={styles.buttonRow}>
+      <View style={styles.buttonCol}>
         <Pressable
           onPress={handleGenerate}
           style={({ pressed }) => [
             styles.generateBtn,
-            { backgroundColor: theme.tint, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }], flex: canEdit ? 1 : undefined, width: canEdit ? undefined : '100%' as any },
+            { backgroundColor: theme.tint, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
           ]}
         >
           <Ionicons name="shuffle" size={22} color="#FFF" />
@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
   weekLabel: { fontSize: 16, fontFamily: 'Inter_600SemiBold' },
   phasePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   phaseText: { fontSize: 12, fontFamily: 'Inter_700Bold' },
-  buttonRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  buttonCol: { gap: 10, marginBottom: 16 },
   generateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -422,8 +422,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 14,
   },
   editBtnText: { fontSize: 15, fontFamily: 'Inter_700Bold' },
