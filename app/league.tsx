@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import { useVolleyball } from '@/lib/volleyball-context';
+import { useVolleyball, LeagueFormat } from '@/lib/volleyball-context';
 
 function NumberStepper({
   label,
@@ -94,6 +94,7 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
 
   const [mode, setMode] = useState<'choose' | 'create' | 'join'>('choose');
   const [leagueName, setLeagueName] = useState('');
+  const [leagueFormat, setLeagueFormat] = useState<LeagueFormat>('roundRobin');
   const [playersPerTeam, setPlayersPerTeam] = useState(4);
   const [numTeams, setNumTeams] = useState(4);
   const [joinCode, setJoinCode] = useState('');
@@ -107,10 +108,14 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
       setError('Please enter a league name');
       return;
     }
+    if (leagueFormat === 'ladder' && numTeams % 2 !== 0) {
+      setError('Ladder format requires an even number of teams');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      await createLeague(leagueName.trim(), playersPerTeam, numTeams);
+      await createLeague(leagueName.trim(), playersPerTeam, numTeams, leagueFormat);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
       setError('Failed to create league. Please try again.');
@@ -254,6 +259,42 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
                   returnKeyType="next"
                 />
 
+                <View style={styles.formatSection}>
+                  <Text style={[styles.formatLabel, { color: theme.text }]}>League Format</Text>
+                  <View style={styles.formatRow}>
+                    <Pressable
+                      onPress={() => { setLeagueFormat('roundRobin'); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                      style={[
+                        styles.formatOption,
+                        { borderColor: leagueFormat === 'roundRobin' ? theme.tint : theme.border, backgroundColor: leagueFormat === 'roundRobin' ? theme.tint + '15' : theme.card },
+                      ]}
+                    >
+                      <Ionicons name="git-network-outline" size={22} color={leagueFormat === 'roundRobin' ? theme.tint : theme.textSecondary} />
+                      <Text style={[styles.formatOptionTitle, { color: leagueFormat === 'roundRobin' ? theme.tint : theme.text }]}>
+                        Round Robin + Playoffs
+                      </Text>
+                      <Text style={[styles.formatOptionDesc, { color: theme.textSecondary }]}>
+                        All teams play each other, then top teams compete in playoffs
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => { setLeagueFormat('ladder'); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                      style={[
+                        styles.formatOption,
+                        { borderColor: leagueFormat === 'ladder' ? theme.tint : theme.border, backgroundColor: leagueFormat === 'ladder' ? theme.tint + '15' : theme.card },
+                      ]}
+                    >
+                      <Ionicons name="swap-vertical" size={22} color={leagueFormat === 'ladder' ? theme.tint : theme.textSecondary} />
+                      <Text style={[styles.formatOptionTitle, { color: leagueFormat === 'ladder' ? theme.tint : theme.text }]}>
+                        Ladder League
+                      </Text>
+                      <Text style={[styles.formatOptionDesc, { color: theme.textSecondary }]}>
+                        6 rounds with court rankings — winners move up, losers move down
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+
                 <NumberStepper
                   label="Players per Team"
                   subtitle="2 to 6 players"
@@ -278,9 +319,19 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
                   <Ionicons name="information-circle" size={18} color={theme.tint} />
                   <Text style={[styles.summaryText, { color: theme.text }]}>
                     {numTeams} teams of {playersPerTeam} = {totalPlayers} players
-                    {numTeams >= 4 ? ' • Round Robin → Semifinals → Finals' : ' • Round Robin only'}
+                    {leagueFormat === 'ladder'
+                      ? ` • 6 rounds, ${Math.floor(numTeams / 2)} court${Math.floor(numTeams / 2) > 1 ? 's' : ''}`
+                      : numTeams >= 4 ? ' • Round Robin → Semifinals → Finals' : ' • Round Robin only'}
                   </Text>
                 </View>
+                {leagueFormat === 'ladder' && numTeams % 2 !== 0 && (
+                  <View style={[styles.summaryCard, { backgroundColor: theme.error + '10', borderColor: theme.error + '30' }]}>
+                    <Ionicons name="warning" size={18} color={theme.error} />
+                    <Text style={[styles.summaryText, { color: theme.error }]}>
+                      Ladder format requires an even number of teams
+                    </Text>
+                  </View>
+                )}
               </>
             ) : (
               <TextInput
@@ -392,6 +443,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   submitText: { color: '#FFF', fontSize: 16, fontFamily: 'Inter_700Bold' },
+  formatSection: { gap: 8 },
+  formatLabel: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+  formatRow: { gap: 10 },
+  formatOption: {
+    borderRadius: 12,
+    borderWidth: 1.5,
+    padding: 14,
+    gap: 4,
+  },
+  formatOptionTitle: { fontSize: 15, fontFamily: 'Inter_700Bold' },
+  formatOptionDesc: { fontSize: 12, fontFamily: 'Inter_400Regular', lineHeight: 17 },
   adminBtn: {
     flexDirection: 'row',
     alignItems: 'center',

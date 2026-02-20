@@ -50,9 +50,35 @@ export interface WeekHistoryEntry {
   videoUrl?: string;
 }
 
+export type LeagueFormat = 'roundRobin' | 'ladder';
+
 export interface LeagueSettings {
   playersPerTeam: number;
   numTeams: number;
+  format: LeagueFormat;
+}
+
+export interface LadderCourt {
+  courtNumber: number;
+  team1Id: string;
+  team2Id: string;
+  game: Game;
+}
+
+export interface LadderRound {
+  roundNumber: number;
+  courts: LadderCourt[];
+  completed: boolean;
+}
+
+export interface LadderWeekData {
+  teams: Team[];
+  rounds: LadderRound[];
+  currentRound: number;
+  totalRounds: number;
+  teamPoints: Record<string, number>;
+  weekNumber: number;
+  phase: 'playing' | 'complete';
 }
 
 interface LeagueInfo {
@@ -64,6 +90,7 @@ interface LeagueInfo {
 interface VolleyballContextValue {
   players: Player[];
   currentWeek: WeekData | null;
+  ladderWeek: LadderWeekData | null;
   history: WeekHistoryEntry[];
   isLoading: boolean;
   league: LeagueInfo | null;
@@ -73,11 +100,13 @@ interface VolleyballContextValue {
   swapPlayers: (player1Id: string, team1Id: string, player2Id: string, team2Id: string) => void;
   submitScore: (gameId: string, team1Score: number, team2Score: number, round: 'roundRobin' | 'semifinal' | 'final') => void;
   undoScore: (gameId: string, round: 'roundRobin' | 'semifinal' | 'final') => void;
+  submitLadderScore: (roundNumber: number, courtNumber: number, team1Score: number, team2Score: number) => void;
+  advanceLadderRound: () => void;
   resetSeason: () => void;
   updateVideoUrl: (weekNumber: number, videoUrl: string | null) => void;
   getTeamRankings: () => Array<{ team: Team; totalPoints: number; wins: number; losses: number; rank: number }>;
   getPlayerStandings: () => Player[];
-  createLeague: (name: string, playersPerTeam?: number, numTeams?: number) => Promise<void>;
+  createLeague: (name: string, playersPerTeam?: number, numTeams?: number, format?: LeagueFormat) => Promise<void>;
   joinLeague: (code: string) => Promise<void>;
   leaveLeague: () => void;
   refreshData: () => Promise<void>;
@@ -86,7 +115,7 @@ interface VolleyballContextValue {
 const VolleyballContext = createContext<VolleyballContextValue | null>(null);
 
 const LEAGUE_KEY = 'vb_league_info';
-const DEFAULT_SETTINGS: LeagueSettings = { playersPerTeam: 4, numTeams: 4 };
+const DEFAULT_SETTINGS: LeagueSettings = { playersPerTeam: 4, numTeams: 4, format: 'roundRobin' };
 
 function getRankingsFromGames(teams: Team[], games: Game[]): Array<{ team: Team; totalPoints: number; wins: number; losses: number; rank: number }> {
   const teamStats = teams.map(team => {
@@ -119,6 +148,7 @@ function getRankingsFromGames(teams: Team[], games: Game[]): Array<{ team: Team;
 export function VolleyballProvider({ children }: { children: ReactNode }) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [currentWeek, setCurrentWeek] = useState<WeekData | null>(null);
+  const [ladderWeek, setLadderWeek] = useState<LadderWeekData | null>(null);
   const [history, setHistory] = useState<WeekHistoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [league, setLeague] = useState<LeagueInfo | null>(null);
@@ -149,8 +179,10 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       setPlayers(data.players || []);
       setCurrentWeek(data.currentWeek || null);
+      setLadderWeek(data.ladderWeek || null);
       setHistory(data.history || []);
-      setSettings(data.settings || DEFAULT_SETTINGS);
+      const s = data.settings || DEFAULT_SETTINGS;
+      setSettings({ ...DEFAULT_SETTINGS, ...s });
     } catch (e) {
       console.error('[VB] Failed to fetch league data:', e);
     }
@@ -162,10 +194,11 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     }
   }, [league]);
 
-  const createLeague = useCallback(async (name: string, playersPerTeam?: number, numTeams?: number) => {
+  const createLeague = useCallback(async (name: string, playersPerTeam?: number, numTeams?: number, format?: LeagueFormat) => {
     const body: any = { name };
     if (playersPerTeam != null) body.playersPerTeam = playersPerTeam;
     if (numTeams != null) body.numTeams = numTeams;
+    if (format) body.format = format;
     const res = await apiRequest('POST', '/api/leagues', body);
     const data = await res.json();
     const leagueInfo: LeagueInfo = { id: data.id, name: data.name, joinCode: data.joinCode };
@@ -187,6 +220,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     setLeague(null);
     setPlayers([]);
     setCurrentWeek(null);
+    setLadderWeek(null);
     setHistory([]);
     setSettings(DEFAULT_SETTINGS);
     AsyncStorage.removeItem(LEAGUE_KEY);
@@ -213,8 +247,9 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     try {
       const res = await apiRequest('POST', `/api/leagues/${league.id}/generate-week`);
       const data = await res.json();
-      setCurrentWeek(data.currentWeek);
-      setHistory(data.history);
+      setCurrentWeek(data.currentWeek || null);
+      setLadderWeek(data.ladderWeek || null);
+      setHistory(data.history || history);
     } catch (e) {
       console.error('Generate week error:', e);
     }
@@ -261,6 +296,31 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     }
   }, [league]);
 
+  const submitLadderScore = useCallback(async (roundNumber: number, courtNumber: number, team1Score: number, team2Score: number) => {
+    if (!league) return;
+    try {
+      const res = await apiRequest('POST', `/api/leagues/${league.id}/ladder-score`, {
+        roundNumber, courtNumber, team1Score, team2Score,
+      });
+      const data = await res.json();
+      setLadderWeek(data.ladderWeek);
+      setPlayers(data.players);
+    } catch (e) {
+      console.error('Submit ladder score error:', e);
+    }
+  }, [league]);
+
+  const advanceLadderRound = useCallback(async () => {
+    if (!league) return;
+    try {
+      const res = await apiRequest('POST', `/api/leagues/${league.id}/ladder-advance`);
+      const data = await res.json();
+      setLadderWeek(data.ladderWeek);
+    } catch (e) {
+      console.error('Advance ladder round error:', e);
+    }
+  }, [league]);
+
   const resetSeason = useCallback(async () => {
     if (!league) return;
     try {
@@ -268,6 +328,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       setPlayers(data.players);
       setCurrentWeek(null);
+      setLadderWeek(null);
       setHistory([]);
     } catch (e) {
       console.error('Reset error:', e);
@@ -306,6 +367,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({
     players,
     currentWeek,
+    ladderWeek,
     history,
     isLoading,
     league,
@@ -315,6 +377,8 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     swapPlayers,
     submitScore,
     undoScore,
+    submitLadderScore,
+    advanceLadderRound,
     resetSeason,
     updateVideoUrl,
     getTeamRankings,
@@ -323,7 +387,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     joinLeague,
     leaveLeague,
     refreshData,
-  }), [players, currentWeek, history, isLoading, league, settings, updatePlayerName, generateNewWeek, swapPlayers, submitScore, undoScore, resetSeason, updateVideoUrl, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
+  }), [players, currentWeek, ladderWeek, history, isLoading, league, settings, updatePlayerName, generateNewWeek, swapPlayers, submitScore, undoScore, submitLadderScore, advanceLadderRound, resetSeason, updateVideoUrl, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
 
   return (
     <VolleyballContext.Provider value={value}>

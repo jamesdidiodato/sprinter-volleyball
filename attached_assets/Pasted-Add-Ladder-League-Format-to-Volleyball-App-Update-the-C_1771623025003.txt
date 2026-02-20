@@ -1,0 +1,144 @@
+Add “Ladder League” Format to Volleyball App
+
+Update the Create New League flow to support two league formats:
+
+League Format Selection Screen
+
+When creating a new league, users must choose one of:
+
+Type 1: Round Robin + Playoffs
+
+This follows the current existing system (no changes).
+
+Type 2: Ladder Format (New)
+
+If “Round Robin + Playoffs” Is Selected
+
+➡ Continue using the current league logic with no changes.
+
+If “Ladder Format” Is Selected
+General Structure
+
+Players Tab: No changes
+
+Teams Tab: No changes
+
+Game format and standings logic: Modified
+
+Total Rounds: 6 rounds
+
+Assume 1 court for every 2 teams
+
+Courts are ranked:
+
+Court #1 = Highest level
+
+Court #2 = Middle level
+
+Court #3 = Lowest level (if 3 courts exist)
+
+Continue ranking as needed depending on total teams
+
+Round 1 Setup
+
+All teams are randomly assigned to courts for Round 1.
+
+Each court hosts 1 match (2 teams per court).
+
+Ladder Movement Rules (After Each Round)
+
+For each court:
+
+Court #1 (Top Court)
+
+Winner → Stays on Court #1
+
+Loser → Moves down to Court #2
+
+Court #2 (Middle Court)
+
+Winner → Moves up to Court #1
+
+Loser → Moves down to Court #3
+
+Court #3 (Lowest Court)
+
+Winner → Moves up to Court #2
+
+Loser → Stays on Court #3 (if it is the lowest court)
+
+General Rule
+
+Winning team moves up one court (unless already on Court #1).
+
+Losing team moves down one court (unless already on lowest court).
+
+Lowest court losers remain there.
+
+System must automatically:
+
+Reassign courts after each round
+
+Generate next round matchups based on updated court positions
+
+Points System
+Rounds 1–2 (Simple Scoring)
+
+Win = 2 points
+
+Loss = 0 points
+
+Rounds 3–6 (Court-Based Scoring)
+Court #1
+
+Winner = 3 points
+
+Loser = 1 point
+
+Court #2
+
+Winner = 2 points
+
+Loser = 0 points
+
+Court #3
+
+Winner = 1 point
+
+Loser = 0 points
+
+(Extend pattern logically if more than 3 courts exist.)
+
+Final Rankings
+
+After 6 rounds:
+
+Rank teams by total accumulated points
+
+Display standings leaderboard
+
+Apply tie-breakers (optional enhancement):
+
+Head-to-head
+
+Point differential
+
+Court 1 appearances
+
+Additional Requirements
+
+Visual ladder view showing:
+
+Court positions per round
+
+Movement indicators (↑ move up, ↓ move down)
+
+Standings page should clearly show:
+
+Total points
+
+Current court position
+
+Movement history (optional enhancement)
+
+Must work dynamically regardless of number of teams (as long as even number).
