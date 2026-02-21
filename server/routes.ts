@@ -748,10 +748,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const numCourts = Math.floor(ladderWeek.teams.length / 2);
-      const courtPoints = numCourts - courtNumber + 1;
       const updatedPoints = { ...ladderWeek.teamPoints };
-      updatedPoints[winnerId] = (updatedPoints[winnerId] || 0) + courtPoints;
-      updatedPoints[loserId] = (updatedPoints[loserId] || 0) + Math.max(0, courtPoints - 1);
+      if (roundNumber === 1) {
+        updatedPoints[winnerId] = (updatedPoints[winnerId] || 0) + 2;
+      } else {
+        const winnerPts = numCourts - courtNumber + 1;
+        const loserPts = courtNumber === 1 ? 1 : 0;
+        updatedPoints[winnerId] = (updatedPoints[winnerId] || 0) + winnerPts;
+        updatedPoints[loserId] = (updatedPoints[loserId] || 0) + loserPts;
+      }
       updatedLadder.teamPoints = updatedPoints;
 
       if (round.courts.every(c => c.game.completed)) {
@@ -807,10 +812,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const numCourts = Math.floor(ladderWeek.teams.length / 2);
-      const courtPoints = numCourts - courtNumber + 1;
       const updatedPoints = { ...ladderWeek.teamPoints };
-      updatedPoints[winnerId] = Math.max(0, (updatedPoints[winnerId] || 0) - courtPoints);
-      updatedPoints[loserId] = Math.max(0, (updatedPoints[loserId] || 0) - Math.max(0, courtPoints - 1));
+      if (roundNumber === 1) {
+        updatedPoints[winnerId] = Math.max(0, (updatedPoints[winnerId] || 0) - 2);
+      } else {
+        const winnerPts = numCourts - courtNumber + 1;
+        const loserPts = courtNumber === 1 ? 1 : 0;
+        updatedPoints[winnerId] = Math.max(0, (updatedPoints[winnerId] || 0) - winnerPts);
+        updatedPoints[loserId] = Math.max(0, (updatedPoints[loserId] || 0) - loserPts);
+      }
 
       const updatedRounds = [...ladderWeek.rounds];
       const updatedRound = { ...round, courts: [...round.courts] };
