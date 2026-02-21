@@ -749,7 +749,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const numCourts = Math.floor(ladderWeek.teams.length / 2);
       const updatedPoints = { ...ladderWeek.teamPoints };
-      if (roundNumber === 1) {
+      if (roundNumber <= 2) {
         updatedPoints[winnerId] = (updatedPoints[winnerId] || 0) + 2;
       } else {
         const winnerPts = numCourts - courtNumber + 1;
@@ -813,7 +813,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const numCourts = Math.floor(ladderWeek.teams.length / 2);
       const updatedPoints = { ...ladderWeek.teamPoints };
-      if (roundNumber === 1) {
+      if (roundNumber <= 2) {
         updatedPoints[winnerId] = Math.max(0, (updatedPoints[winnerId] || 0) - 2);
       } else {
         const winnerPts = numCourts - courtNumber + 1;
