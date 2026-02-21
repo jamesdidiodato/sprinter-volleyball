@@ -194,10 +194,11 @@ function RoundSection({ title, subtitle, games, teams, onSubmit, onUndo, round, 
   );
 }
 
-function LadderCourtCard({ court, teams, onSubmit }: {
+function LadderCourtCard({ court, teams, onSubmit, onUndo }: {
   court: LadderCourt;
   teams: any[];
   onSubmit: (courtNumber: number, s1: number, s2: number) => void;
+  onUndo?: (courtNumber: number) => void;
 }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -238,9 +239,23 @@ function LadderCourtCard({ court, teams, onSubmit }: {
           <View style={[styles.courtBadge, { backgroundColor: theme.tint + '20' }]}>
             <Text style={[styles.courtBadgeText, { color: theme.tint }]}>Court {court.courtNumber}</Text>
           </View>
-          <View style={styles.completedBadge}>
-            <Ionicons name="checkmark-circle" size={16} color={theme.success} />
-            <Text style={[styles.completedText, { color: theme.success }]}>Final</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={styles.completedBadge}>
+              <Ionicons name="checkmark-circle" size={16} color={theme.success} />
+              <Text style={[styles.completedText, { color: theme.success }]}>Final</Text>
+            </View>
+            {onUndo && (
+              <Pressable
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onUndo(court.courtNumber); }}
+                style={({ pressed }) => [
+                  styles.undoBtn,
+                  { backgroundColor: theme.border, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Ionicons name="arrow-undo" size={14} color={theme.textSecondary} />
+                <Text style={[styles.undoBtnText, { color: theme.textSecondary }]}>Undo</Text>
+              </Pressable>
+            )}
           </View>
         </View>
         <View style={styles.matchupRow}>
@@ -320,7 +335,7 @@ function LadderScoresView() {
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
-  const { ladderWeek, submitLadderScore, advanceLadderRound } = useVolleyball();
+  const { ladderWeek, submitLadderScore, undoLadderScore, advanceLadderRound } = useVolleyball();
 
   if (!ladderWeek) {
     return (
@@ -344,6 +359,10 @@ function LadderScoresView() {
 
   const handleCourtScore = (courtNumber: number, s1: number, s2: number) => {
     submitLadderScore(currentRound.roundNumber, courtNumber, s1, s2);
+  };
+
+  const handleCourtUndo = (courtNumber: number) => {
+    undoLadderScore(currentRound.roundNumber, courtNumber);
   };
 
   const handleAdvance = () => {
@@ -400,6 +419,7 @@ function LadderScoresView() {
             court={court}
             teams={ladderWeek.teams}
             onSubmit={handleCourtScore}
+            onUndo={handleCourtUndo}
           />
         ))}
       </View>

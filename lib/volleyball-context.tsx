@@ -101,6 +101,7 @@ interface VolleyballContextValue {
   submitScore: (gameId: string, team1Score: number, team2Score: number, round: 'roundRobin' | 'semifinal' | 'final') => void;
   undoScore: (gameId: string, round: 'roundRobin' | 'semifinal' | 'final') => void;
   submitLadderScore: (roundNumber: number, courtNumber: number, team1Score: number, team2Score: number) => void;
+  undoLadderScore: (roundNumber: number, courtNumber: number) => void;
   advanceLadderRound: () => void;
   resetSeason: () => void;
   updateVideoUrl: (weekNumber: number, videoUrl: string | null) => void;
@@ -314,6 +315,20 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     }
   }, [league]);
 
+  const undoLadderScore = useCallback(async (roundNumber: number, courtNumber: number) => {
+    if (!league) return;
+    try {
+      const res = await apiRequest('POST', `/api/leagues/${league.id}/undo-ladder-score`, {
+        roundNumber, courtNumber,
+      });
+      const data = await res.json();
+      setLadderWeek(data.ladderWeek);
+      setPlayers(data.players);
+    } catch (e) {
+      console.error('Undo ladder score error:', e);
+    }
+  }, [league]);
+
   const advanceLadderRound = useCallback(async () => {
     if (!league) return;
     try {
@@ -382,6 +397,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     submitScore,
     undoScore,
     submitLadderScore,
+    undoLadderScore,
     advanceLadderRound,
     resetSeason,
     updateVideoUrl,
@@ -391,7 +407,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     joinLeague,
     leaveLeague,
     refreshData,
-  }), [players, currentWeek, ladderWeek, history, isLoading, league, settings, updatePlayerName, generateNewWeek, swapPlayers, submitScore, undoScore, submitLadderScore, advanceLadderRound, resetSeason, updateVideoUrl, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
+  }), [players, currentWeek, ladderWeek, history, isLoading, league, settings, updatePlayerName, generateNewWeek, swapPlayers, submitScore, undoScore, submitLadderScore, undoLadderScore, advanceLadderRound, resetSeason, updateVideoUrl, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
 
   return (
     <VolleyballContext.Provider value={value}>

@@ -767,6 +767,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/leagues/:id/undo-ladder-score", async (req: Request, res: Response) => {
+    try {
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
+      if (!league) return res.status(404).json({ error: "League not found" });
+      const ladderWeek = league.currentWeek as LadderWeekData | null;
+      if (!ladderWeek || !ladderWeek.rounds) return res.status(400).json({ error: "No ladder week active" });
+
+      const { roundNumber, courtNumber } = req.body;
+
+      const roundIdx = ladderWeek.rounds.findIndex(r => r.roundNumber === roundNumber);
+      if (roundIdx === -1) return res.status(400).json({ error: "Round not found" });
+
+      const round = ladderWeek.rounds[roundIdx];
+      const courtIdx = round.courts.findIndex(c => c.courtNumber === courtNumber);
+      if (courtIdx === -1) return res.status(400).json({ error: "Court not found" });
+
+      const court = round.courts[courtIdx];
+      if (!court.game.completed) return res.status(400).json({ error: "Game not completed" });
+
+      if (roundIdx < ladderWeek.rounds.length - 1) {
+        return res.status(400).json({ error: "Cannot undo score from a previous round. Undo later rounds first." });
+      }
+
+      let players = [...(league.players as Player[])];
+      const winnerId = (court.game.team1Score ?? 0) > (court.game.team2Score ?? 0) ? court.team1Id : court.team2Id;
+      const loserId = (court.game.team1Score ?? 0) > (court.game.team2Score ?? 0) ? court.team2Id : court.team1Id;
+
+      const winningTeam = ladderWeek.teams.find(t => t.id === winnerId);
+      const losingTeam = ladderWeek.teams.find(t => t.id === loserId);
+      if (winningTeam && losingTeam) {
+        const winnerIds = new Set(winningTeam.players.map(p => p.id));
+        const loserIds = new Set(losingTeam.players.map(p => p.id));
+        players = players.map(p => {
+          if (winnerIds.has(p.id)) return { ...p, seasonWins: Math.max(0, p.seasonWins - 1) };
+          if (loserIds.has(p.id)) return { ...p, seasonLosses: Math.max(0, p.seasonLosses - 1) };
+          return p;
+        });
+      }
+
+      const numCourts = Math.floor(ladderWeek.teams.length / 2);
+      const courtPoints = numCourts - courtNumber + 1;
+      const updatedPoints = { ...ladderWeek.teamPoints };
+      updatedPoints[winnerId] = Math.max(0, (updatedPoints[winnerId] || 0) - courtPoints);
+      updatedPoints[loserId] = Math.max(0, (updatedPoints[loserId] || 0) - Math.max(0, courtPoints - 1));
+
+      const updatedRounds = [...ladderWeek.rounds];
+      const updatedRound = { ...round, courts: [...round.courts] };
+      updatedRound.courts[courtIdx] = {
+        ...court,
+        game: { ...court.game, team1Score: null, team2Score: null, completed: false },
+      };
+      updatedRound.completed = false;
+      updatedRounds[roundIdx] = updatedRound;
+
+      const updatedLadder = { ...ladderWeek, rounds: updatedRounds, teamPoints: updatedPoints };
+      await storage.updateLeague(league.id, { currentWeek: updatedLadder, players });
+      return res.json({ ladderWeek: updatedLadder, players });
+    } catch (e: any) {
+      console.error("Undo ladder score error:", e);
+      return res.status(500).json({ error: "Failed to undo ladder score" });
+    }
+  });
+
   app.post("/api/leagues/:id/ladder-advance", async (req: Request, res: Response) => {
     try {
       const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
