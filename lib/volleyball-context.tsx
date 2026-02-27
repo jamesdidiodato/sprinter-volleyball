@@ -105,7 +105,7 @@ interface VolleyballContextValue {
   advanceLadderRound: () => void;
   resetSeason: () => void;
   updateVideoUrl: (weekNumber: number, videoUrl: string | null) => void;
-  getTeamRankings: () => Array<{ team: Team; totalPoints: number; wins: number; losses: number; rank: number }>;
+  getTeamRankings: () => Array<{ team: Team; totalPoints: number; totalPointsAllowed: number; pointDifferential: number; wins: number; losses: number; rank: number }>;
   getPlayerStandings: () => Player[];
   createLeague: (name: string, playersPerTeam?: number, numTeams?: number, format?: LeagueFormat) => Promise<void>;
   joinLeague: (code: string) => Promise<void>;
@@ -118,9 +118,10 @@ const VolleyballContext = createContext<VolleyballContextValue | null>(null);
 const LEAGUE_KEY = 'vb_league_info';
 const DEFAULT_SETTINGS: LeagueSettings = { playersPerTeam: 4, numTeams: 4, format: 'roundRobin' };
 
-function getRankingsFromGames(teams: Team[], games: Game[]): Array<{ team: Team; totalPoints: number; wins: number; losses: number; rank: number }> {
+function getRankingsFromGames(teams: Team[], games: Game[]): Array<{ team: Team; totalPoints: number; totalPointsAllowed: number; pointDifferential: number; wins: number; losses: number; rank: number }> {
   const teamStats = teams.map(team => {
     let totalPoints = 0;
+    let totalPointsAllowed = 0;
     let wins = 0;
     let losses = 0;
 
@@ -128,22 +129,36 @@ function getRankingsFromGames(teams: Team[], games: Game[]): Array<{ team: Team;
       if (!game.completed) return;
       if (game.team1Id === team.id) {
         totalPoints += game.team1Score ?? 0;
+        totalPointsAllowed += game.team2Score ?? 0;
         if ((game.team1Score ?? 0) > (game.team2Score ?? 0)) wins++;
         else losses++;
       } else if (game.team2Id === team.id) {
         totalPoints += game.team2Score ?? 0;
+        totalPointsAllowed += game.team1Score ?? 0;
         if ((game.team2Score ?? 0) > (game.team1Score ?? 0)) wins++;
         else losses++;
       }
     });
 
-    return { team, totalPoints, wins, losses, rank: 0 };
+    const pointDifferential = totalPoints - totalPointsAllowed;
+    return { team, totalPoints, totalPointsAllowed, pointDifferential, wins, losses, rank: 0 };
   });
 
-  teamStats.sort((a, b) => b.totalPoints - a.totalPoints);
+  teamStats.sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    return b.pointDifferential - a.pointDifferential;
+  });
   teamStats.forEach((s, i) => { s.rank = i + 1; });
 
   return teamStats;
+}
+
+export function getTeamDisplayName(team: Team): string {
+  const setter = team.players.find(p => p.position === 'Setter');
+  if (setter && setter.name.trim()) {
+    return `${team.name} - ${setter.name}`;
+  }
+  return team.name;
 }
 
 export function VolleyballProvider({ children }: { children: ReactNode }) {

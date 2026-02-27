@@ -16,7 +16,7 @@ import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import Colors from '@/constants/colors';
-import { useVolleyball, Player, LadderWeekData } from '@/lib/volleyball-context';
+import { useVolleyball, Player, LadderWeekData, getTeamDisplayName } from '@/lib/volleyball-context';
 
 type SortKey = 'winPct' | 'wins' | 'losses' | 'name';
 
@@ -144,7 +144,7 @@ export default function StandingsScreen() {
                 {idx + 1}
               </Text>
               <Text style={[styles.ladderTeamName, { color: theme.text }]} numberOfLines={1}>
-                {entry.team?.name ?? '?'}
+                {entry.team ? getTeamDisplayName(entry.team) : '?'}
               </Text>
               <Text style={[styles.ladderPoints, { color: theme.tint }]}>
                 {entry.points} pts

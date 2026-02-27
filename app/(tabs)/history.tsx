@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import { useVolleyball, WeekHistoryEntry, Game, LadderRound } from '@/lib/volleyball-context';
+import { useVolleyball, WeekHistoryEntry, Game, LadderRound, getTeamDisplayName } from '@/lib/volleyball-context';
 
 function extractYouTubeId(url: string): string | null {
   const patterns = [
@@ -179,13 +179,13 @@ function GameResultRow({ game, teams, theme }: { game: Game; teams: any[]; theme
   return (
     <View style={[styles.gameResultRow, { borderBottomColor: theme.border }]}>
       <Text style={[styles.grTeamName, { color: t1Won ? theme.tint : theme.textSecondary, fontFamily: t1Won ? 'Inter_700Bold' : 'Inter_400Regular' }]} numberOfLines={1}>
-        {team1?.name ?? '?'}
+        {team1 ? getTeamDisplayName(team1) : '?'}
       </Text>
       <Text style={[styles.grScore, { color: theme.text }]}>{game.team1Score}</Text>
       <Text style={[styles.grDash, { color: theme.textSecondary }]}>-</Text>
       <Text style={[styles.grScore, { color: theme.text }]}>{game.team2Score}</Text>
       <Text style={[styles.grTeamName, styles.grTeamRight, { color: !t1Won ? theme.tint : theme.textSecondary, fontFamily: !t1Won ? 'Inter_700Bold' : 'Inter_400Regular' }]} numberOfLines={1}>
-        {team2?.name ?? '?'}
+        {team2 ? getTeamDisplayName(team2) : '?'}
       </Text>
     </View>
   );
@@ -231,6 +231,7 @@ function WeekCard({ entry }: { entry: WeekHistoryEntry }) {
         <View style={styles.weekSummary}>
           {entry.rankings.slice(0, 4).map((r, i) => {
             const team = entry.teams.find(t => t.name === r.teamName);
+            const displayName = team ? getTeamDisplayName(team) : r.teamName;
             const playerNames = team ? team.players.map(p => p.name).join(', ') : '';
             return (
               <View key={i} style={styles.summaryRow}>
@@ -239,7 +240,7 @@ function WeekCard({ entry }: { entry: WeekHistoryEntry }) {
                 </Text>
                 <View style={styles.summaryTeamCol}>
                   <Text style={[styles.summaryTeam, { color: theme.text }]} numberOfLines={1}>
-                    {r.teamName}: {playerNames}
+                    {displayName}: {playerNames}
                   </Text>
                 </View>
                 <Text style={[styles.summaryPts, { color: theme.textSecondary }]}>
@@ -259,12 +260,13 @@ function WeekCard({ entry }: { entry: WeekHistoryEntry }) {
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>RANKINGS</Text>
             {entry.rankings.map((r, i) => {
               const team = entry.teams.find(t => t.name === r.teamName);
+              const displayName = team ? getTeamDisplayName(team) : r.teamName;
               const playerNames = team ? team.players.map(p => p.name).join(', ') : '';
               return (
                 <View key={i} style={[styles.rankRow, { borderBottomColor: theme.border }]}>
                   <Text style={[styles.rankNum, { color: theme.tint }]}>#{r.rank}</Text>
                   <View style={styles.rankTeamCol}>
-                    <Text style={[styles.rankTeam, { color: theme.text }]} numberOfLines={1}>{r.teamName}: {playerNames}</Text>
+                    <Text style={[styles.rankTeam, { color: theme.text }]} numberOfLines={1}>{displayName}: {playerNames}</Text>
                   </View>
                   <Text style={[styles.rankStat, { color: theme.success }]}>{r.wins}W</Text>
                   <Text style={[styles.rankStat, { color: theme.error }]}>{r.losses}L</Text>
@@ -305,7 +307,7 @@ function WeekCard({ entry }: { entry: WeekHistoryEntry }) {
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>TEAMS</Text>
             {entry.teams.map(team => (
               <View key={team.id} style={styles.teamBlock}>
-                <Text style={[styles.teamBlockName, { color: theme.text }]}>{team.name}</Text>
+                <Text style={[styles.teamBlockName, { color: theme.text }]}>{getTeamDisplayName(team)}</Text>
                 <Text style={[styles.teamPlayers, { color: theme.textSecondary }]}>
                   {team.players.map(p => p.name).join(', ')}
                 </Text>
@@ -372,7 +374,7 @@ function LadderWeekCard({ entry }: { entry: LadderHistoryEntry }) {
               <Text style={[styles.summaryRank, { color: i === 0 ? theme.tint : theme.textSecondary }]}>#{i + 1}</Text>
               <View style={styles.summaryTeamCol}>
                 <Text style={[styles.summaryTeam, { color: theme.text }]} numberOfLines={1}>
-                  {e.team.name}
+                  {getTeamDisplayName(e.team)}
                 </Text>
               </View>
               <Text style={[styles.summaryPts, { color: theme.textSecondary }]}>{e.points} pts</Text>
@@ -391,7 +393,7 @@ function LadderWeekCard({ entry }: { entry: LadderHistoryEntry }) {
               <View key={e.team.id} style={[styles.rankRow, { borderBottomColor: theme.border }]}>
                 <Text style={[styles.rankNum, { color: theme.tint }]}>#{i + 1}</Text>
                 <View style={styles.rankTeamCol}>
-                  <Text style={[styles.rankTeam, { color: theme.text }]} numberOfLines={1}>{e.team.name}</Text>
+                  <Text style={[styles.rankTeam, { color: theme.text }]} numberOfLines={1}>{getTeamDisplayName(e.team)}</Text>
                 </View>
                 <Text style={[styles.rankPts, { color: theme.textSecondary }]}>{e.points} pts</Text>
               </View>
@@ -410,13 +412,13 @@ function LadderWeekCard({ entry }: { entry: LadderHistoryEntry }) {
                   <View key={court.courtNumber} style={[styles.gameResultRow, { borderBottomColor: theme.border }]}>
                     <Text style={[styles.ladderCourtNum, { color: theme.textSecondary }]}>Ct{court.courtNumber}</Text>
                     <Text style={[styles.grTeamName, { color: t1Won ? theme.tint : theme.textSecondary, fontFamily: t1Won ? 'Inter_700Bold' : 'Inter_400Regular' }]} numberOfLines={1}>
-                      {team1?.name ?? '?'}
+                      {team1 ? getTeamDisplayName(team1) : '?'}
                     </Text>
                     <Text style={[styles.grScore, { color: theme.text }]}>{court.game.team1Score}</Text>
                     <Text style={[styles.grDash, { color: theme.textSecondary }]}>-</Text>
                     <Text style={[styles.grScore, { color: theme.text }]}>{court.game.team2Score}</Text>
                     <Text style={[styles.grTeamName, styles.grTeamRight, { color: !t1Won ? theme.tint : theme.textSecondary, fontFamily: !t1Won ? 'Inter_700Bold' : 'Inter_400Regular' }]} numberOfLines={1}>
-                      {team2?.name ?? '?'}
+                      {team2 ? getTeamDisplayName(team2) : '?'}
                     </Text>
                   </View>
                 );
@@ -428,7 +430,7 @@ function LadderWeekCard({ entry }: { entry: LadderHistoryEntry }) {
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>TEAMS</Text>
             {entry.teams.map((team: any) => (
               <View key={team.id} style={styles.teamBlock}>
-                <Text style={[styles.teamBlockName, { color: theme.text }]}>{team.name}</Text>
+                <Text style={[styles.teamBlockName, { color: theme.text }]}>{getTeamDisplayName(team)}</Text>
                 <Text style={[styles.teamPlayers, { color: theme.textSecondary }]}>
                   {team.players.map((p: any) => p.name).join(', ')}
                 </Text>

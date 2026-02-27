@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withDelay } from 'react-native-reanimated';
 import Colors from '@/constants/colors';
-import { useVolleyball, Team, Player } from '@/lib/volleyball-context';
+import { useVolleyball, Team, Player, getTeamDisplayName } from '@/lib/volleyball-context';
 
 const POSITION_LABELS: Record<string, string> = { Setter: 'S', Hitter: 'H', Libero: 'L', Defender: 'D' };
 
@@ -51,7 +51,7 @@ function TeamCard({ team, index, editMode, selectedPlayer, onPlayerTap }: {
     <Animated.View style={[styles.teamCard, { backgroundColor: theme.card, borderColor: editMode ? accent + '60' : theme.border }, animStyle]}>
       <View style={[styles.teamHeader, { borderBottomColor: theme.border }]}>
         <View style={[styles.teamDot, { backgroundColor: accent }]} />
-        <Text style={[styles.teamName, { color: theme.text }]}>{team.name}</Text>
+        <Text style={[styles.teamName, { color: theme.text }]}>{getTeamDisplayName(team)}</Text>
         {editMode && (
           <View style={[styles.editBadge, { backgroundColor: accent + '20' }]}>
             <Text style={[styles.editBadgeText, { color: accent }]}>Tap to swap</Text>
@@ -287,17 +287,17 @@ export default function TeamsScreen() {
             <View style={[styles.rankHeaderRow, { borderBottomColor: theme.border }]}>
               <Text style={[styles.rankHeaderCell, styles.rankCol, { color: theme.textSecondary }]}>#</Text>
               <Text style={[styles.rankHeaderCell, styles.teamCol, { color: theme.textSecondary }]}>Team</Text>
-              <Text style={[styles.rankHeaderCell, styles.statCol, { color: theme.textSecondary }]}>Pts</Text>
               <Text style={[styles.rankHeaderCell, styles.statCol, { color: theme.textSecondary }]}>W</Text>
               <Text style={[styles.rankHeaderCell, styles.statCol, { color: theme.textSecondary }]}>L</Text>
+              <Text style={[styles.rankHeaderCell, styles.statCol, { color: theme.textSecondary }]}>+/-</Text>
             </View>
             {rankings.map((r) => (
               <View key={r.team.id} style={[styles.rankRow, { borderBottomColor: theme.border }]}>
                 <Text style={[styles.rankCell, styles.rankCol, { color: theme.tint, fontFamily: 'Inter_700Bold' }]}>{r.rank}</Text>
-                <Text style={[styles.rankCell, styles.teamCol, { color: theme.text }]} numberOfLines={1}>{r.team.name}</Text>
-                <Text style={[styles.rankCell, styles.statCol, { color: theme.text }]}>{r.totalPoints}</Text>
+                <Text style={[styles.rankCell, styles.teamCol, { color: theme.text }]} numberOfLines={1}>{getTeamDisplayName(r.team)}</Text>
                 <Text style={[styles.rankCell, styles.statCol, { color: theme.success }]}>{r.wins}</Text>
                 <Text style={[styles.rankCell, styles.statCol, { color: theme.error }]}>{r.losses}</Text>
+                <Text style={[styles.rankCell, styles.statCol, { color: r.pointDifferential >= 0 ? theme.success : theme.error }]}>{r.pointDifferential > 0 ? '+' : ''}{r.pointDifferential}</Text>
               </View>
             ))}
           </View>
@@ -316,7 +316,7 @@ export default function TeamsScreen() {
               <View key={game.id} style={[styles.bracketGame, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <View style={styles.bracketRow}>
                   <Text style={[styles.bracketTeam, { color: done ? (t1Won ? theme.tint : theme.textSecondary) : theme.text }]} numberOfLines={1}>
-                    {team1?.name ?? '?'}
+                    {team1 ? getTeamDisplayName(team1) : '?'}
                   </Text>
                   <Text style={[styles.bracketScore, { color: theme.text }]}>
                     {done ? game.team1Score : '-'}
@@ -324,7 +324,7 @@ export default function TeamsScreen() {
                 </View>
                 <View style={styles.bracketRow}>
                   <Text style={[styles.bracketTeam, { color: done ? (!t1Won ? theme.tint : theme.textSecondary) : theme.text }]} numberOfLines={1}>
-                    {team2?.name ?? '?'}
+                    {team2 ? getTeamDisplayName(team2) : '?'}
                   </Text>
                   <Text style={[styles.bracketScore, { color: theme.text }]}>
                     {done ? game.team2Score : '-'}
@@ -349,7 +349,7 @@ export default function TeamsScreen() {
                 {game.label && <Text style={[styles.bracketLabel, { color: theme.textSecondary }]}>{game.label}</Text>}
                 <View style={styles.bracketRow}>
                   <Text style={[styles.bracketTeam, { color: done ? (t1Won ? theme.tint : theme.textSecondary) : theme.text }]} numberOfLines={1}>
-                    {team1?.name ?? '?'}
+                    {team1 ? getTeamDisplayName(team1) : '?'}
                   </Text>
                   <Text style={[styles.bracketScore, { color: theme.text }]}>
                     {done ? game.team1Score : '-'}
@@ -357,7 +357,7 @@ export default function TeamsScreen() {
                 </View>
                 <View style={styles.bracketRow}>
                   <Text style={[styles.bracketTeam, { color: done ? (!t1Won ? theme.tint : theme.textSecondary) : theme.text }]} numberOfLines={1}>
-                    {team2?.name ?? '?'}
+                    {team2 ? getTeamDisplayName(team2) : '?'}
                   </Text>
                   <Text style={[styles.bracketScore, { color: theme.text }]}>
                     {done ? game.team2Score : '-'}

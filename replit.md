@@ -59,6 +59,9 @@ Preferred communication style: Simple, everyday language.
 - **Multi-user via join codes**: Users create or join leagues using unique codes — no individual user accounts needed. League info is cached locally in AsyncStorage
 - **Server-side data persistence**: All volleyball data is stored in PostgreSQL via JSONB columns. This allows real-time data sharing across all devices in a league
 - **Tournament structure**: Each week follows round-robin for all team counts. For 4+ teams: round-robin → semifinals → finals. For 2-3 teams: round-robin only. Scoring validation (winner must reach 21+, scores max at 21)
+- **Round Robin Ranking**: Teams ranked by gamesWon (desc), then pointDifferential (totalPointsScored - totalPointsAllowed, desc) as tiebreaker. Applied both client-side (`getRankingsFromGames` in volleyball-context.tsx) and server-side (server/routes.ts)
+- **Team Display Format**: Teams displayed as "Team X - SetterName" via `getTeamDisplayName()` helper (exported from volleyball-context.tsx). Falls back to plain team name if no setter found. Applied across all screens: scores, teams, history, standings
+- **Ladder Scoring**: Rounds 1-2: winner=2pts, loser=0pts (all courts). Rounds 3-6: Court 1 winner=3/loser=1, Court 2 winner=2/loser=0, Court 3 winner=1/loser=0. Undo logic matches
 - **Player composition**: Configurable roster size (numTeams × playersPerTeam). Position distribution per team: 1 Setter always, remaining split between Hitters and Backs based on team size
 - **Build system**: Custom build script (`scripts/build.js`) handles Expo static builds for deployment, with esbuild for server bundling
 

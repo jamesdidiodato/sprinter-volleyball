@@ -181,20 +181,26 @@ function generateRoundRobinGames(teams: Team[]): Game[] {
 
 function getRankingsFromGames(teams: Team[], games: Game[]) {
   const teamStats = teams.map(team => {
-    let totalPoints = 0, wins = 0, losses = 0;
+    let totalPoints = 0, totalPointsAllowed = 0, wins = 0, losses = 0;
     games.forEach(game => {
       if (!game.completed) return;
       if (game.team1Id === team.id) {
         totalPoints += game.team1Score ?? 0;
+        totalPointsAllowed += game.team2Score ?? 0;
         if ((game.team1Score ?? 0) > (game.team2Score ?? 0)) wins++; else losses++;
       } else if (game.team2Id === team.id) {
         totalPoints += game.team2Score ?? 0;
+        totalPointsAllowed += game.team1Score ?? 0;
         if ((game.team2Score ?? 0) > (game.team1Score ?? 0)) wins++; else losses++;
       }
     });
-    return { team, totalPoints, wins, losses, rank: 0 };
+    const pointDifferential = totalPoints - totalPointsAllowed;
+    return { team, totalPoints, totalPointsAllowed, pointDifferential, wins, losses, rank: 0 };
   });
-  teamStats.sort((a, b) => b.totalPoints - a.totalPoints);
+  teamStats.sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    return b.pointDifferential - a.pointDifferential;
+  });
   teamStats.forEach((s, i) => { s.rank = i + 1; });
   return teamStats;
 }

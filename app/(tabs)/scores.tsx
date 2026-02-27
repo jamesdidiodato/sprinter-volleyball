@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import { useVolleyball, Game, LadderWeekData, LadderCourt } from '@/lib/volleyball-context';
+import { useVolleyball, Game, LadderWeekData, LadderCourt, getTeamDisplayName } from '@/lib/volleyball-context';
 
 function GameScoreCard({ game, teams, onSubmit, onUndo, round }: {
   game: Game;
@@ -94,7 +94,7 @@ function GameScoreCard({ game, teams, onSubmit, onUndo, round }: {
         <View style={styles.matchupRow}>
           <View style={styles.teamScoreCol}>
             <Text style={[styles.matchTeamName, { color: t1Won ? theme.tint : theme.textSecondary }]} numberOfLines={1}>
-              {team1?.name ?? '?'}
+              {team1 ? getTeamDisplayName(team1) : '?'}
             </Text>
             <Text style={[styles.finalScore, { color: t1Won ? theme.tint : theme.textSecondary }]}>
               {game.team1Score}
@@ -103,7 +103,7 @@ function GameScoreCard({ game, teams, onSubmit, onUndo, round }: {
           <Text style={[styles.vs, { color: theme.textSecondary }]}>-</Text>
           <View style={styles.teamScoreCol}>
             <Text style={[styles.matchTeamName, { color: !t1Won ? theme.tint : theme.textSecondary }]} numberOfLines={1}>
-              {team2?.name ?? '?'}
+              {team2 ? getTeamDisplayName(team2) : '?'}
             </Text>
             <Text style={[styles.finalScore, { color: !t1Won ? theme.tint : theme.textSecondary }]}>
               {game.team2Score}
@@ -118,7 +118,7 @@ function GameScoreCard({ game, teams, onSubmit, onUndo, round }: {
     <View style={[styles.gameCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
       <View style={styles.matchupRow}>
         <View style={styles.teamScoreCol}>
-          <Text style={[styles.matchTeamName, { color: theme.text }]} numberOfLines={1}>{team1?.name ?? '?'}</Text>
+          <Text style={[styles.matchTeamName, { color: theme.text }]} numberOfLines={1}>{team1 ? getTeamDisplayName(team1) : '?'}</Text>
           <TextInput
             style={[styles.scoreInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
             value={score1}
@@ -132,7 +132,7 @@ function GameScoreCard({ game, teams, onSubmit, onUndo, round }: {
         </View>
         <Text style={[styles.vs, { color: theme.textSecondary }]}>vs</Text>
         <View style={styles.teamScoreCol}>
-          <Text style={[styles.matchTeamName, { color: theme.text }]} numberOfLines={1}>{team2?.name ?? '?'}</Text>
+          <Text style={[styles.matchTeamName, { color: theme.text }]} numberOfLines={1}>{team2 ? getTeamDisplayName(team2) : '?'}</Text>
           <TextInput
             style={[styles.scoreInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
             value={score2}
@@ -261,7 +261,7 @@ function LadderCourtCard({ court, teams, onSubmit, onUndo }: {
         <View style={styles.matchupRow}>
           <View style={styles.teamScoreCol}>
             <Text style={[styles.matchTeamName, { color: t1Won ? theme.tint : theme.textSecondary }]} numberOfLines={1}>
-              {team1?.name ?? '?'}
+              {team1 ? getTeamDisplayName(team1) : '?'}
             </Text>
             <Text style={[styles.finalScore, { color: t1Won ? theme.tint : theme.textSecondary }]}>
               {court.game.team1Score}
@@ -270,7 +270,7 @@ function LadderCourtCard({ court, teams, onSubmit, onUndo }: {
           <Text style={[styles.vs, { color: theme.textSecondary }]}>-</Text>
           <View style={styles.teamScoreCol}>
             <Text style={[styles.matchTeamName, { color: !t1Won ? theme.tint : theme.textSecondary }]} numberOfLines={1}>
-              {team2?.name ?? '?'}
+              {team2 ? getTeamDisplayName(team2) : '?'}
             </Text>
             <Text style={[styles.finalScore, { color: !t1Won ? theme.tint : theme.textSecondary }]}>
               {court.game.team2Score}
@@ -288,7 +288,7 @@ function LadderCourtCard({ court, teams, onSubmit, onUndo }: {
       </View>
       <View style={styles.matchupRow}>
         <View style={styles.teamScoreCol}>
-          <Text style={[styles.matchTeamName, { color: theme.text }]} numberOfLines={1}>{team1?.name ?? '?'}</Text>
+          <Text style={[styles.matchTeamName, { color: theme.text }]} numberOfLines={1}>{team1 ? getTeamDisplayName(team1) : '?'}</Text>
           <TextInput
             style={[styles.scoreInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
             value={score1}
@@ -302,7 +302,7 @@ function LadderCourtCard({ court, teams, onSubmit, onUndo }: {
         </View>
         <Text style={[styles.vs, { color: theme.textSecondary }]}>vs</Text>
         <View style={styles.teamScoreCol}>
-          <Text style={[styles.matchTeamName, { color: theme.text }]} numberOfLines={1}>{team2?.name ?? '?'}</Text>
+          <Text style={[styles.matchTeamName, { color: theme.text }]} numberOfLines={1}>{team2 ? getTeamDisplayName(team2) : '?'}</Text>
           <TextInput
             style={[styles.scoreInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
             value={score2}
@@ -451,13 +451,13 @@ function LadderScoresView() {
                   <View key={court.courtNumber} style={[styles.prevCourtRow, { borderColor: theme.border }]}>
                     <Text style={[styles.prevCourtLabel, { color: theme.textSecondary }]}>Ct {court.courtNumber}</Text>
                     <Text style={[styles.prevTeamName, { color: t1Won ? theme.tint : theme.textSecondary }]} numberOfLines={1}>
-                      {team1?.name ?? '?'}
+                      {team1 ? getTeamDisplayName(team1) : '?'}
                     </Text>
                     <Text style={[styles.prevScore, { color: theme.text }]}>
                       {court.game.team1Score} - {court.game.team2Score}
                     </Text>
                     <Text style={[styles.prevTeamName, { color: !t1Won ? theme.tint : theme.textSecondary }]} numberOfLines={1}>
-                      {team2?.name ?? '?'}
+                      {team2 ? getTeamDisplayName(team2) : '?'}
                     </Text>
                   </View>
                 );
