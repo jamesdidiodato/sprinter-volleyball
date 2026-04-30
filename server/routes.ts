@@ -602,10 +602,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedWeek.semifinalGames = currentWeek.semifinalGames.map(g =>
           g.id === gameId ? { ...g, team1Score, team2Score, completed: true } : g
         );
-        const game = updatedWeek.semifinalGames.find(g => g.id === gameId)!;
-        const winnerId = team1Score > team2Score ? game.team1Id : game.team2Id;
-        const loserId = team1Score > team2Score ? game.team2Id : game.team1Id;
-        applyWinLoss(winnerId, loserId);
         if (updatedWeek.semifinalGames.every(g => g.completed)) {
           updatedWeek.finalGames = generateFinals(updatedWeek);
           updatedWeek.phase = 'finals';
@@ -614,10 +610,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedWeek.finalGames = currentWeek.finalGames.map(g =>
           g.id === gameId ? { ...g, team1Score, team2Score, completed: true } : g
         );
-        const game = updatedWeek.finalGames.find(g => g.id === gameId)!;
-        const winnerId = team1Score > team2Score ? game.team1Id : game.team2Id;
-        const loserId = team1Score > team2Score ? game.team2Id : game.team1Id;
-        applyWinLoss(winnerId, loserId);
         if (updatedWeek.finalGames.every(g => g.completed)) {
           updatedWeek.phase = 'complete';
         }
@@ -668,8 +660,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           g.id === gameId ? { ...g, team1Score: null, team2Score: null, completed: false } : g
         );
         if (updatedWeek.phase !== 'roundRobin') {
-          updatedWeek.semifinalGames.forEach(g => { if (g.completed) reverseWinLoss(g); });
-          updatedWeek.finalGames.forEach(g => { if (g.completed) reverseWinLoss(g); });
           updatedWeek.semifinalGames = [];
           updatedWeek.finalGames = [];
           updatedWeek.phase = 'roundRobin';
@@ -677,19 +667,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (round === 'semifinal') {
         const game = currentWeek.semifinalGames.find(g => g.id === gameId);
         if (!game || !game.completed) return res.status(400).json({ error: "Game not found or not completed" });
-        reverseWinLoss(game);
         updatedWeek.semifinalGames = currentWeek.semifinalGames.map(g =>
           g.id === gameId ? { ...g, team1Score: null, team2Score: null, completed: false } : g
         );
         if (updatedWeek.phase !== 'semifinals') {
-          updatedWeek.finalGames.forEach(g => { if (g.completed) reverseWinLoss(g); });
           updatedWeek.finalGames = [];
           updatedWeek.phase = 'semifinals';
         }
       } else if (round === 'final') {
         const game = currentWeek.finalGames.find(g => g.id === gameId);
         if (!game || !game.completed) return res.status(400).json({ error: "Game not found or not completed" });
-        reverseWinLoss(game);
         updatedWeek.finalGames = currentWeek.finalGames.map(g =>
           g.id === gameId ? { ...g, team1Score: null, team2Score: null, completed: false } : g
         );
