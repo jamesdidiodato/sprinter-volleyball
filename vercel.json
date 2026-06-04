@@ -1,10 +1,13 @@
 {
+  "framework": null,
   "buildCommand": "npx expo export --platform web",
   "outputDirectory": "dist",
+  "installCommand": "npm install",
   "functions": {
     "api/index.ts": {
       "runtime": "@vercel/node@5",
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "shared/**"
     }
   },
   "rewrites": [
