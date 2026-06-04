@@ -18,7 +18,7 @@ import * as Sharing from 'expo-sharing';
 import Colors from '@/constants/colors';
 import { useVolleyball, Player, LadderWeekData, getTeamDisplayName } from '@/lib/volleyball-context';
 
-type SortKey = 'winPct' | 'wins' | 'losses' | 'name';
+type SortKey = 'points' | 'winPct' | 'wins' | 'losses' | 'name';
 
 export default function StandingsScreen() {
   const colorScheme = useColorScheme();
@@ -26,13 +26,15 @@ export default function StandingsScreen() {
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
   const { getPlayerStandings, resetSeason, settings, ladderWeek } = useVolleyball();
-  const [sortBy, setSortBy] = useState<SortKey>('winPct');
+  const [sortBy, setSortBy] = useState<SortKey>('points');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const standings = getPlayerStandings();
 
   const sorted = [...standings].sort((a, b) => {
     switch (sortBy) {
+      case 'points':
+        return (b.seasonPoints ?? 0) - (a.seasonPoints ?? 0);
       case 'wins':
         return b.seasonWins - a.seasonWins;
       case 'losses':
@@ -57,12 +59,10 @@ export default function StandingsScreen() {
 
   const handleExport = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const header = 'Name,Position,Wins,Losses,Win%\n';
-    const rows = sorted.map(p => {
-      const total = p.seasonWins + p.seasonLosses;
-      const pct = total > 0 ? ((p.seasonWins / total) * 100).toFixed(1) : '0.0';
-      return `${p.name},${p.position},${p.seasonWins},${p.seasonLosses},${pct}%`;
-    }).join('\n');
+    const header = 'Name,Points,Wins,Losses\n';
+    const rows = sorted.map(p =>
+      `${p.name},${p.seasonPoints ?? 0},${p.seasonWins},${p.seasonLosses}`
+    ).join('\n');
     const csv = header + rows;
 
     if (Platform.OS === 'web') {
@@ -85,7 +85,7 @@ export default function StandingsScreen() {
   };
 
   const sortOptions: Array<{ key: SortKey; label: string }> = [
-    { key: 'winPct', label: 'Win %' },
+    { key: 'points', label: 'Points' },
     { key: 'wins', label: 'Wins' },
     { key: 'losses', label: 'Losses' },
     { key: 'name', label: 'Name' },
@@ -176,29 +176,23 @@ export default function StandingsScreen() {
       <View style={[styles.tableHeader, { borderBottomColor: theme.border }]}>
         <Text style={[styles.thCell, styles.rankW, { color: theme.textSecondary }]}>#</Text>
         <Text style={[styles.thCell, styles.nameW, { color: theme.textSecondary }]}>Player</Text>
-        <Text style={[styles.thCell, styles.posW, { color: theme.textSecondary }]}>Pos</Text>
+        <Text style={[styles.thCell, styles.ptsW, { color: theme.textSecondary }]}>Pts</Text>
         <Text style={[styles.thCell, styles.numW, { color: theme.textSecondary }]}>W</Text>
         <Text style={[styles.thCell, styles.numW, { color: theme.textSecondary }]}>L</Text>
-        <Text style={[styles.thCell, styles.pctW, { color: theme.textSecondary }]}>%</Text>
       </View>
     </View>
   );
 
   const renderPlayer = ({ item, index }: { item: Player; index: number }) => {
-    const total = item.seasonWins + item.seasonLosses;
-    const pct = total > 0 ? ((item.seasonWins / total) * 100).toFixed(0) : '-';
-    const posColor = (theme as any)[item.position.toLowerCase()] || theme.tint;
-
     return (
       <View style={[styles.tableRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <Text style={[styles.tdCell, styles.rankW, { color: theme.textSecondary }]}>{index + 1}</Text>
         <Text style={[styles.tdCell, styles.nameW, { color: theme.text, fontFamily: 'Inter_600SemiBold' }]} numberOfLines={1}>{item.name}</Text>
-        <View style={[styles.miniPosBadge, { backgroundColor: posColor }]}>
-          <Text style={styles.miniPosText}>{item.position[0]}</Text>
-        </View>
+        <Text style={[styles.tdCell, styles.ptsW, { color: theme.tint, fontFamily: 'Inter_700Bold' }]}>
+          {item.seasonPoints ?? 0}
+        </Text>
         <Text style={[styles.tdCell, styles.numW, { color: theme.success }]}>{item.seasonWins}</Text>
         <Text style={[styles.tdCell, styles.numW, { color: theme.error }]}>{item.seasonLosses}</Text>
-        <Text style={[styles.tdCell, styles.pctW, { color: theme.tint, fontFamily: 'Inter_700Bold' }]}>{pct === '-' ? '-' : `${pct}%`}</Text>
       </View>
     );
   };
@@ -299,6 +293,7 @@ const styles = StyleSheet.create({
   rankW: { width: 28 },
   nameW: { flex: 1, marginRight: 8 },
   posW: { width: 32, textAlign: 'center' as const },
+  ptsW: { width: 42, textAlign: 'center' as const },
   numW: { width: 36, textAlign: 'center' as const },
   pctW: { width: 44, textAlign: 'right' as const },
   miniPosBadge: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 4 },
