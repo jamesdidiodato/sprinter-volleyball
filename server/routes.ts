@@ -11,6 +11,7 @@ interface Player {
   position: Position;
   seasonWins: number;
   seasonLosses: number;
+  seasonPoints: number;
 }
 
 interface Team {
@@ -83,16 +84,16 @@ function generateDefaultPlayers(settings: LeagueSettings): Player[] {
   const players: Player[] = [];
   let id = 1;
   for (let i = 0; i < dist.setters * settings.numTeams; i++) {
-    players.push({ id: String(id++), name: `Setter ${i + 1}`, position: 'Setter', seasonWins: 0, seasonLosses: 0 });
+    players.push({ id: String(id++), name: `Setter ${i + 1}`, position: 'Setter', seasonWins: 0, seasonLosses: 0, seasonPoints: 0 });
   }
   for (let i = 0; i < dist.hitters * settings.numTeams; i++) {
-    players.push({ id: String(id++), name: `Hitter ${i + 1}`, position: 'Hitter', seasonWins: 0, seasonLosses: 0 });
+    players.push({ id: String(id++), name: `Hitter ${i + 1}`, position: 'Hitter', seasonWins: 0, seasonLosses: 0, seasonPoints: 0 });
   }
   for (let i = 0; i < dist.liberos * settings.numTeams; i++) {
-    players.push({ id: String(id++), name: `Libero ${i + 1}`, position: 'Libero', seasonWins: 0, seasonLosses: 0 });
+    players.push({ id: String(id++), name: `Libero ${i + 1}`, position: 'Libero', seasonWins: 0, seasonLosses: 0, seasonPoints: 0 });
   }
   for (let i = 0; i < dist.defenders * settings.numTeams; i++) {
-    players.push({ id: String(id++), name: `Defender ${i + 1}`, position: 'Defender', seasonWins: 0, seasonLosses: 0 });
+    players.push({ id: String(id++), name: `Defender ${i + 1}`, position: 'Defender', seasonWins: 0, seasonLosses: 0, seasonPoints: 0 });
   }
   return players;
 }
@@ -545,6 +546,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/leagues/:id/swap-ladder-court-teams", async (req: Request, res: Response) => {
+    try {
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
+      if (!league) return res.status(404).json({ error: "League not found" });
+      const ladderWeek = league.currentWeek as LadderWeekData | null;
+      if (!ladderWeek) return res.status(400).json({ error: "No ladder week active" });
+
+      const { roundNumber, courtANumber, teamAId, courtBNumber, teamBId } = req.body;
+
+      const updatedRounds = ladderWeek.rounds.map(round => {
+        if (round.roundNumber !== roundNumber) return round;
+        const updatedCourts = round.courts.map(court => {
+          if (court.courtNumber === courtANumber) {
+            const newTeam1Id = court.team1Id === teamAId ? teamBId : court.team1Id;
+            const newTeam2Id = court.team2Id === teamAId ? teamBId : court.team2Id;
+            return { ...court, team1Id: newTeam1Id, team2Id: newTeam2Id, game: { ...court.game, team1Id: newTeam1Id, team2Id: newTeam2Id } };
+          }
+          if (court.courtNumber === courtBNumber) {
+            const newTeam1Id = court.team1Id === teamBId ? teamAId : court.team1Id;
+            const newTeam2Id = court.team2Id === teamBId ? teamAId : court.team2Id;
+            return { ...court, team1Id: newTeam1Id, team2Id: newTeam2Id, game: { ...court.game, team1Id: newTeam1Id, team2Id: newTeam2Id } };
+          }
+          return court;
+        });
+        return { ...round, courts: updatedCourts };
+      });
+
+      const updatedLadder = { ...ladderWeek, rounds: updatedRounds };
+      await storage.updateLeague(league.id, { currentWeek: updatedLadder });
+      return res.json({ ladderWeek: updatedLadder });
+    } catch (e: any) {
+      console.error("Swap ladder court teams error:", e);
+      return res.status(500).json({ error: "Failed to swap ladder court teams" });
+    }
+  });
+
   app.post("/api/leagues/:id/submit-score", async (req: Request, res: Response) => {
     try {
       const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
@@ -728,19 +765,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const winnerId = team1Score > team2Score ? court.team1Id : court.team2Id;
       const loserId = team1Score > team2Score ? court.team2Id : court.team1Id;
 
+      const numCourts = Math.floor(ladderWeek.teams.length / 2);
+      const winnerLadderPts = roundNumber <= 2 ? 2 : numCourts - courtNumber + 1;
+      const loserLadderPts = roundNumber <= 2 ? 0 : (courtNumber === 1 ? 1 : 0);
+
       const winningTeam = ladderWeek.teams.find(t => t.id === winnerId);
       const losingTeam = ladderWeek.teams.find(t => t.id === loserId);
       if (winningTeam && losingTeam) {
         const winnerIds = new Set(winningTeam.players.map(p => p.id));
         const loserIds = new Set(losingTeam.players.map(p => p.id));
         players = players.map(p => {
-          if (winnerIds.has(p.id)) return { ...p, seasonWins: p.seasonWins + 1 };
-          if (loserIds.has(p.id)) return { ...p, seasonLosses: p.seasonLosses + 1 };
+          if (winnerIds.has(p.id)) return { ...p, seasonWins: p.seasonWins + 1, seasonPoints: (p.seasonPoints ?? 0) + winnerLadderPts };
+          if (loserIds.has(p.id)) return { ...p, seasonLosses: p.seasonLosses + 1, seasonPoints: (p.seasonPoints ?? 0) + loserLadderPts };
           return p;
         });
       }
 
-      const numCourts = Math.floor(ladderWeek.teams.length / 2);
       const updatedPoints = { ...ladderWeek.teamPoints };
       if (roundNumber <= 2) {
         updatedPoints[winnerId] = (updatedPoints[winnerId] || 0) + 2;
@@ -792,19 +832,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const winnerId = (court.game.team1Score ?? 0) > (court.game.team2Score ?? 0) ? court.team1Id : court.team2Id;
       const loserId = (court.game.team1Score ?? 0) > (court.game.team2Score ?? 0) ? court.team2Id : court.team1Id;
 
+      const numCourts = Math.floor(ladderWeek.teams.length / 2);
+      const winnerLadderPts = roundNumber <= 2 ? 2 : numCourts - courtNumber + 1;
+      const loserLadderPts = roundNumber <= 2 ? 0 : (courtNumber === 1 ? 1 : 0);
+
       const winningTeam = ladderWeek.teams.find(t => t.id === winnerId);
       const losingTeam = ladderWeek.teams.find(t => t.id === loserId);
       if (winningTeam && losingTeam) {
         const winnerIds = new Set(winningTeam.players.map(p => p.id));
         const loserIds = new Set(losingTeam.players.map(p => p.id));
         players = players.map(p => {
-          if (winnerIds.has(p.id)) return { ...p, seasonWins: Math.max(0, p.seasonWins - 1) };
-          if (loserIds.has(p.id)) return { ...p, seasonLosses: Math.max(0, p.seasonLosses - 1) };
+          if (winnerIds.has(p.id)) return { ...p, seasonWins: Math.max(0, p.seasonWins - 1), seasonPoints: Math.max(0, (p.seasonPoints ?? 0) - winnerLadderPts) };
+          if (loserIds.has(p.id)) return { ...p, seasonLosses: Math.max(0, p.seasonLosses - 1), seasonPoints: Math.max(0, (p.seasonPoints ?? 0) - loserLadderPts) };
           return p;
         });
       }
 
-      const numCourts = Math.floor(ladderWeek.teams.length / 2);
       const updatedPoints = { ...ladderWeek.teamPoints };
       if (roundNumber <= 2) {
         updatedPoints[winnerId] = Math.max(0, (updatedPoints[winnerId] || 0) - 2);
@@ -896,7 +939,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
       if (!league) return res.status(404).json({ error: "League not found" });
-      const players = (league.players as Player[]).map(p => ({ ...p, seasonWins: 0, seasonLosses: 0 }));
+      const players = (league.players as Player[]).map(p => ({ ...p, seasonWins: 0, seasonLosses: 0, seasonPoints: 0 }));
       await storage.updateLeague(league.id, { players, currentWeek: null, history: [] });
       return res.json({ success: true, players });
     } catch (e: any) {
