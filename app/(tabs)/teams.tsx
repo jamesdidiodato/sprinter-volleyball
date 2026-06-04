@@ -95,12 +95,15 @@ export default function TeamsScreen() {
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
-  const { currentWeek, ladderWeek, generateNewWeek, swapPlayers, getTeamRankings, settings } = useVolleyball();
+  const { currentWeek, ladderWeek, generateNewWeek, swapPlayers, swapLadderCourtTeams, getTeamRankings, settings } = useVolleyball();
 
   const [editMode, setEditMode] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<{ playerId: string; teamId: string } | null>(null);
   const [showSwapConfirm, setShowSwapConfirm] = useState(false);
   const [pendingSwap, setPendingSwap] = useState<{ p1Id: string; t1Id: string; p2Id: string; t2Id: string; p1Name: string; p2Name: string } | null>(null);
+  const [selectedCourtTeam, setSelectedCourtTeam] = useState<{ courtNumber: number; teamId: string } | null>(null);
+  const [showCourtSwapModal, setShowCourtSwapModal] = useState(false);
+  const [pendingCourtSwap, setPendingCourtSwap] = useState<{ courtANumber: number; teamAId: string; courtBNumber: number; teamBId: string; teamAName: string; teamBName: string } | null>(null);
 
   const isLadder = settings.format === 'ladder';
   const activeWeek = isLadder ? ladderWeek : currentWeek;
@@ -175,6 +178,48 @@ export default function TeamsScreen() {
     setShowSwapConfirm(false);
     setPendingSwap(null);
     setSelectedPlayer(null);
+  };
+
+  const handleCourtTeamTap = (courtNumber: number, teamId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!selectedCourtTeam) {
+      setSelectedCourtTeam({ courtNumber, teamId });
+      return;
+    }
+    if (selectedCourtTeam.teamId === teamId) {
+      setSelectedCourtTeam(null);
+      return;
+    }
+    const round1 = ladderWeek?.rounds[0];
+    const teamA = ladderWeek?.teams.find(t => t.id === selectedCourtTeam.teamId);
+    const teamB = ladderWeek?.teams.find(t => t.id === teamId);
+    if (teamA && teamB && round1) {
+      setPendingCourtSwap({
+        courtANumber: selectedCourtTeam.courtNumber,
+        teamAId: selectedCourtTeam.teamId,
+        courtBNumber: courtNumber,
+        teamBId: teamId,
+        teamAName: getTeamDisplayName(teamA),
+        teamBName: getTeamDisplayName(teamB),
+      });
+      setShowCourtSwapModal(true);
+    }
+  };
+
+  const confirmCourtSwap = () => {
+    if (pendingCourtSwap) {
+      swapLadderCourtTeams(1, pendingCourtSwap.courtANumber, pendingCourtSwap.teamAId, pendingCourtSwap.courtBNumber, pendingCourtSwap.teamBId);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    setShowCourtSwapModal(false);
+    setPendingCourtSwap(null);
+    setSelectedCourtTeam(null);
+  };
+
+  const cancelCourtSwap = () => {
+    setShowCourtSwapModal(false);
+    setPendingCourtSwap(null);
+    setSelectedCourtTeam(null);
   };
 
   const rankings = getTeamRankings();
@@ -277,6 +322,66 @@ export default function TeamsScreen() {
               onPlayerTap={handlePlayerTap}
             />
           ))}
+        </View>
+      )}
+
+      {isLadder && !hasAnyScores && ladderWeek && ladderWeek.rounds[0] && (
+        <View style={styles.rankingsSection}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Court Assignments</Text>
+          {selectedCourtTeam && (
+            <View style={[styles.editHint, { backgroundColor: theme.tint + '15', borderColor: theme.tint + '30', marginBottom: 12 }]}>
+              <Ionicons name="swap-horizontal" size={18} color={theme.tint} />
+              <Text style={[styles.editHintText, { color: theme.tint }]}>
+                Now tap any other team to swap them
+              </Text>
+            </View>
+          )}
+          {!selectedCourtTeam && (
+            <View style={[styles.editHint, { backgroundColor: theme.textSecondary + '15', borderColor: theme.border, marginBottom: 12 }]}>
+              <Ionicons name="information-circle" size={18} color={theme.textSecondary} />
+              <Text style={[styles.editHintText, { color: theme.textSecondary }]}>
+                Tap any team to reorder courts before play begins
+              </Text>
+            </View>
+          )}
+          {ladderWeek.rounds[0].courts.map(court => {
+            const team1 = ladderWeek.teams.find(t => t.id === court.team1Id);
+            const team2 = ladderWeek.teams.find(t => t.id === court.team2Id);
+            const isTeam1Selected = selectedCourtTeam?.teamId === court.team1Id;
+            const isTeam2Selected = selectedCourtTeam?.teamId === court.team2Id;
+            return (
+              <View key={court.courtNumber} style={[styles.courtCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Text style={[styles.courtLabel, { color: theme.textSecondary }]}>Court {court.courtNumber}</Text>
+                <View style={styles.courtRow}>
+                  <Pressable
+                    onPress={() => handleCourtTeamTap(court.courtNumber, court.team1Id)}
+                    style={({ pressed }) => [
+                      styles.courtTeamBtn,
+                      { backgroundColor: isTeam1Selected ? theme.tint + '25' : pressed ? theme.tint + '10' : 'transparent',
+                        borderColor: isTeam1Selected ? theme.tint : 'transparent', borderWidth: 1.5, borderRadius: 8 },
+                    ]}
+                  >
+                    <Text style={[styles.courtTeamName, { color: isTeam1Selected ? theme.tint : theme.text }]} numberOfLines={1}>
+                      {team1 ? getTeamDisplayName(team1) : '?'}
+                    </Text>
+                  </Pressable>
+                  <Text style={[styles.courtVs, { color: theme.textSecondary }]}>vs</Text>
+                  <Pressable
+                    onPress={() => handleCourtTeamTap(court.courtNumber, court.team2Id)}
+                    style={({ pressed }) => [
+                      styles.courtTeamBtn,
+                      { backgroundColor: isTeam2Selected ? theme.tint + '25' : pressed ? theme.tint + '10' : 'transparent',
+                        borderColor: isTeam2Selected ? theme.tint : 'transparent', borderWidth: 1.5, borderRadius: 8 },
+                    ]}
+                  >
+                    <Text style={[styles.courtTeamName, { color: isTeam2Selected ? theme.tint : theme.text }]} numberOfLines={1}>
+                      {team2 ? getTeamDisplayName(team2) : '?'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -406,6 +511,43 @@ export default function TeamsScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={showCourtSwapModal}
+        transparent
+        animationType="fade"
+        onRequestClose={cancelCourtSwap}
+      >
+        <Pressable style={styles.modalOverlay} onPress={cancelCourtSwap}>
+          <Pressable style={[styles.modalCard, { backgroundColor: isDark ? '#1E2D3D' : '#FFF' }]}>
+            <Ionicons name="swap-vertical" size={36} color={theme.tint} style={styles.modalIcon} />
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Swap Courts?</Text>
+            <Text style={[styles.modalMessage, { color: theme.textSecondary }]}>
+              Move {pendingCourtSwap?.teamAName} to Court {pendingCourtSwap?.courtBNumber} and {pendingCourtSwap?.teamBName} to Court {pendingCourtSwap?.courtANumber}?
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={cancelCourtSwap}
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  { backgroundColor: isDark ? '#2A3A4A' : '#E8E8E8', opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Text style={[styles.modalBtnText, { color: theme.text }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={confirmCourtSwap}
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  { backgroundColor: theme.tint, opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Text style={[styles.modalBtnText, { color: '#FFF' }]}>Swap</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -507,4 +649,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalBtnText: { fontSize: 14, fontFamily: 'Inter_700Bold' },
+  courtCard: { borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 10 },
+  courtLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', textTransform: 'uppercase' as const, marginBottom: 8 },
+  courtRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  courtTeamBtn: { flex: 1, paddingHorizontal: 10, paddingVertical: 8 },
+  courtTeamName: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+  courtVs: { fontSize: 13, fontFamily: 'Inter_400Regular', paddingHorizontal: 4 },
 });
