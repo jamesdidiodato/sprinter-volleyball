@@ -1,6 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { leagues, type League, type InsertLeague } from "@shared/schema";
+import { leagues, type League, type InsertLeague } from "../shared/schema";
 
 const db = drizzle(process.env.DATABASE_URL!);
 
