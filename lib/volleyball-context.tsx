@@ -9,6 +9,7 @@ export interface Player {
   name: string;
   position: Position;
   seasonWins: number;
+  seasonPoints: number;
   seasonLosses: number;
 }
 
@@ -98,6 +99,7 @@ interface VolleyballContextValue {
   updatePlayerName: (id: string, name: string) => void;
   generateNewWeek: () => void;
   swapPlayers: (player1Id: string, team1Id: string, player2Id: string, team2Id: string) => void;
+  swapLadderCourtTeams: (roundNumber: number, courtANumber: number, teamAId: string, courtBNumber: number, teamBId: string) => void;
   submitScore: (gameId: string, team1Score: number, team2Score: number, round: 'roundRobin' | 'semifinal' | 'final') => void;
   undoScore: (gameId: string, round: 'roundRobin' | 'semifinal' | 'final') => void;
   submitLadderScore: (roundNumber: number, courtNumber: number, team1Score: number, team2Score: number) => void;
@@ -154,9 +156,9 @@ function getRankingsFromGames(teams: Team[], games: Game[]): Array<{ team: Team;
 }
 
 export function getTeamDisplayName(team: Team): string {
-  const setter = team.players.find(p => p.position === 'Setter');
-  if (setter && setter.name.trim()) {
-    return `${team.name} - ${setter.name}`;
+  const first = team.players[0];
+  if (first && first.name.trim()) {
+    return `${team.name} - ${first.name}`;
   }
   return team.name;
 }
@@ -288,6 +290,23 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     }
   }, [league]);
 
+  const swapLadderCourtTeams = useCallback(async (
+    roundNumber: number,
+    courtANumber: number, teamAId: string,
+    courtBNumber: number, teamBId: string,
+  ) => {
+    if (!league) return;
+    try {
+      const res = await apiRequest('POST', `/api/leagues/${league.id}/swap-ladder-court-teams`, {
+        roundNumber, courtANumber, teamAId, courtBNumber, teamBId,
+      });
+      const data = await res.json();
+      setLadderWeek(data.ladderWeek);
+    } catch (e) {
+      console.error('Swap ladder court teams error:', e);
+    }
+  }, [league]);
+
   const submitScore = useCallback(async (gameId: string, team1Score: number, team2Score: number, round: 'roundRobin' | 'semifinal' | 'final') => {
     if (!league) return;
     try {
@@ -389,6 +408,12 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
 
   const getPlayerStandings = useCallback(() => {
     return [...players].sort((a, b) => {
+      if (settings.format === 'ladder') {
+        const aPts = a.seasonPoints ?? 0;
+        const bPts = b.seasonPoints ?? 0;
+        if (bPts !== aPts) return bPts - aPts;
+        return b.seasonWins - a.seasonWins;
+      }
       const aTotal = a.seasonWins + a.seasonLosses;
       const bTotal = b.seasonWins + b.seasonLosses;
       const aWinPct = aTotal > 0 ? a.seasonWins / aTotal : 0;
@@ -396,7 +421,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
       if (bWinPct !== aWinPct) return bWinPct - aWinPct;
       return b.seasonWins - a.seasonWins;
     });
-  }, [players]);
+  }, [players, settings.format]);
 
   const value = useMemo(() => ({
     players,
@@ -409,6 +434,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     updatePlayerName,
     generateNewWeek,
     swapPlayers,
+    swapLadderCourtTeams,
     submitScore,
     undoScore,
     submitLadderScore,
@@ -422,7 +448,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     joinLeague,
     leaveLeague,
     refreshData,
-  }), [players, currentWeek, ladderWeek, history, isLoading, league, settings, updatePlayerName, generateNewWeek, swapPlayers, submitScore, undoScore, submitLadderScore, undoLadderScore, advanceLadderRound, resetSeason, updateVideoUrl, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
+  }), [players, currentWeek, ladderWeek, history, isLoading, league, settings, updatePlayerName, generateNewWeek, swapPlayers, swapLadderCourtTeams, submitScore, undoScore, submitLadderScore, undoLadderScore, advanceLadderRound, resetSeason, updateVideoUrl, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
 
   return (
     <VolleyballContext.Provider value={value}>
