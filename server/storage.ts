@@ -1,8 +1,16 @@
 import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import { leagues, type League, type InsertLeague } from "../shared/schema";
 
-const db = drizzle(process.env.DATABASE_URL!);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL?.includes(".neon.tech")
+    ? { rejectUnauthorized: false }
+    : false,
+});
+
+const db = drizzle(pool);
 
 export interface IStorage {
   createLeague(data: InsertLeague & { players: any[]; settings?: any }): Promise<League>;
