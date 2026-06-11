@@ -620,13 +620,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       if (round === 'roundRobin') {
+        const existingGame = currentWeek.games.find(g => g.id === gameId);
+        if (!existingGame) return res.status(400).json({ error: "Game not found" });
+        const alreadyScored = existingGame.completed;
         updatedWeek.games = currentWeek.games.map(g =>
           g.id === gameId ? { ...g, team1Score, team2Score, completed: true } : g
         );
         const game = updatedWeek.games.find(g => g.id === gameId)!;
         const winnerId = team1Score > team2Score ? game.team1Id : game.team2Id;
         const loserId = team1Score > team2Score ? game.team2Id : game.team1Id;
-        applyWinLoss(winnerId, loserId);
+        if (!alreadyScored) applyWinLoss(winnerId, loserId);
         if (updatedWeek.games.every(g => g.completed)) {
           if (hasSemifinals(settings.numTeams)) {
             updatedWeek.semifinalGames = generateSemifinals(updatedWeek);
@@ -759,6 +762,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (courtIdx === -1) return res.status(400).json({ error: "Court not found" });
 
       const court = { ...round.courts[courtIdx] };
+      if (court.game.completed) {
+        return res.json({ ladderWeek, players: league.players });
+      }
       court.game = { ...court.game, team1Score, team2Score, completed: true };
       round.courts[courtIdx] = court;
 
