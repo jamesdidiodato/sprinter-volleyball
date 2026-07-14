@@ -8,6 +8,7 @@ import {
   TextInput,
   useColorScheme,
   Platform,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -335,7 +336,8 @@ function LadderScoresView() {
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
-  const { ladderWeek, submitLadderScore, undoLadderScore, advanceLadderRound } = useVolleyball();
+  const { ladderWeek, submitLadderScore, undoLadderScore, advanceLadderRound, resetCurrentWeek } = useVolleyball();
+  const [showResetWeekConfirm, setShowResetWeekConfirm] = useState(false);
 
   if (!ladderWeek) {
     return (
@@ -356,6 +358,7 @@ function LadderScoresView() {
   const completedGamesAllRounds = ladderWeek.rounds.reduce((acc, r) => acc + r.courts.filter(c => c.game.completed).length, 0);
   const allCurrentComplete = currentRound?.courts.every(c => c.game.completed) ?? false;
   const canAdvance = allCurrentComplete && ladderWeek.currentRound < ladderWeek.totalRounds;
+  const hasAnyScores = completedGamesAllRounds > 0;
 
   const handleCourtScore = (courtNumber: number, s1: number, s2: number) => {
     submitLadderScore(currentRound.roundNumber, courtNumber, s1, s2);
@@ -370,7 +373,14 @@ function LadderScoresView() {
     advanceLadderRound();
   };
 
+  const confirmResetWeek = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    resetCurrentWeek();
+    setShowResetWeekConfirm(false);
+  };
+
   return (
+    <>
     <ScrollView
       style={[styles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 + 16 : insets.top + 16, paddingBottom: Platform.OS === 'web' ? 34 + 100 : 350 }]}
@@ -378,7 +388,18 @@ function LadderScoresView() {
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
     >
-      <Text style={[styles.title, { color: theme.text }]}>Ladder Scores</Text>
+      <View style={styles.titleRow}>
+        <Text style={[styles.title, { color: theme.text }]}>Ladder Scores</Text>
+        {hasAnyScores && (
+          <Pressable
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowResetWeekConfirm(true); }}
+            style={({ pressed }) => [styles.resetWeekBtn, { backgroundColor: theme.error + '18', opacity: pressed ? 0.75 : 1 }]}
+          >
+            <Ionicons name="refresh" size={15} color={theme.error} />
+            <Text style={[styles.resetWeekBtnText, { color: theme.error }]}>Reset Week</Text>
+          </Pressable>
+        )}
+      </View>
       <View style={styles.metaRow}>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
           Week {ladderWeek.weekNumber}
@@ -467,6 +488,27 @@ function LadderScoresView() {
         </View>
       )}
     </ScrollView>
+
+    <Modal visible={showResetWeekConfirm} transparent animationType="fade" onRequestClose={() => setShowResetWeekConfirm(false)}>
+      <Pressable style={styles.modalOverlay} onPress={() => setShowResetWeekConfirm(false)}>
+        <Pressable style={[styles.modalCard, { backgroundColor: isDark ? '#1E2D3D' : '#FFF' }]}>
+          <Ionicons name="refresh-circle" size={36} color={theme.error} style={styles.modalIcon} />
+          <Text style={[styles.modalTitle, { color: theme.text }]}>Reset This Week?</Text>
+          <Text style={[styles.modalMessage, { color: theme.textSecondary }]}>
+            All scores for Week {ladderWeek.weekNumber} will be cleared and stats reversed. Teams stay the same — you can re-enter scores from scratch.{'\n\n'}Past weeks and season history are not affected.
+          </Text>
+          <View style={styles.modalActions}>
+            <Pressable onPress={() => setShowResetWeekConfirm(false)} style={({ pressed }) => [styles.modalBtn, { backgroundColor: isDark ? '#2A3A4A' : '#E8E8E8', opacity: pressed ? 0.85 : 1 }]}>
+              <Text style={[styles.modalBtnText, { color: theme.text }]}>Cancel</Text>
+            </Pressable>
+            <Pressable onPress={confirmResetWeek} style={({ pressed }) => [styles.modalBtn, { backgroundColor: theme.error, opacity: pressed ? 0.85 : 1 }]}>
+              <Text style={[styles.modalBtnText, { color: '#FFF' }]}>Reset Week</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+    </>
   );
 }
 
@@ -475,7 +517,8 @@ export default function ScoresScreen() {
   const isDark = colorScheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
-  const { currentWeek, ladderWeek, submitScore, undoScore, settings } = useVolleyball();
+  const { currentWeek, ladderWeek, submitScore, undoScore, settings, resetCurrentWeek } = useVolleyball();
+  const [showResetWeekConfirm, setShowResetWeekConfirm] = useState(false);
 
   if (settings.format === 'ladder') {
     return <LadderScoresView />;
@@ -511,7 +554,16 @@ export default function ScoresScreen() {
     complete: 'Week Complete',
   }[currentWeek.phase];
 
+  const hasAnyScores = totalCompleted > 0;
+
+  const confirmResetWeek = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    resetCurrentWeek();
+    setShowResetWeekConfirm(false);
+  };
+
   return (
+    <>
     <ScrollView
       style={[styles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 + 16 : insets.top + 16, paddingBottom: Platform.OS === 'web' ? 34 + 100 : 350 }]}
@@ -520,7 +572,18 @@ export default function ScoresScreen() {
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
     >
-        <Text style={[styles.title, { color: theme.text }]}>Enter Scores</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, { color: theme.text }]}>Enter Scores</Text>
+          {hasAnyScores && (
+            <Pressable
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowResetWeekConfirm(true); }}
+              style={({ pressed }) => [styles.resetWeekBtn, { backgroundColor: theme.error + '18', opacity: pressed ? 0.75 : 1 }]}
+            >
+              <Ionicons name="refresh" size={15} color={theme.error} />
+              <Text style={[styles.resetWeekBtnText, { color: theme.error }]}>Reset Week</Text>
+            </Pressable>
+          )}
+        </View>
         <View style={styles.metaRow}>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             Week {currentWeek.weekNumber}
@@ -583,6 +646,27 @@ export default function ScoresScreen() {
           />
         )}
     </ScrollView>
+
+    <Modal visible={showResetWeekConfirm} transparent animationType="fade" onRequestClose={() => setShowResetWeekConfirm(false)}>
+      <Pressable style={styles.modalOverlay} onPress={() => setShowResetWeekConfirm(false)}>
+        <Pressable style={[styles.modalCard, { backgroundColor: isDark ? '#1E2D3D' : '#FFF' }]}>
+          <Ionicons name="refresh-circle" size={36} color={theme.error} style={styles.modalIcon} />
+          <Text style={[styles.modalTitle, { color: theme.text }]}>Reset This Week?</Text>
+          <Text style={[styles.modalMessage, { color: theme.textSecondary }]}>
+            All scores for Week {currentWeek.weekNumber} will be cleared and stats reversed. Teams stay the same — you can re-enter scores from scratch.{'\n\n'}Past weeks and season history are not affected.
+          </Text>
+          <View style={styles.modalActions}>
+            <Pressable onPress={() => setShowResetWeekConfirm(false)} style={({ pressed }) => [styles.modalBtn, { backgroundColor: isDark ? '#2A3A4A' : '#E8E8E8', opacity: pressed ? 0.85 : 1 }]}>
+              <Text style={[styles.modalBtnText, { color: theme.text }]}>Cancel</Text>
+            </Pressable>
+            <Pressable onPress={confirmResetWeek} style={({ pressed }) => [styles.modalBtn, { backgroundColor: theme.error, opacity: pressed ? 0.85 : 1 }]}>
+              <Text style={[styles.modalBtnText, { color: '#FFF' }]}>Reset Week</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+    </>
   );
 }
 
@@ -593,7 +677,18 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 20, fontFamily: 'Inter_700Bold' },
   emptySubtitle: { fontSize: 15, fontFamily: 'Inter_400Regular', textAlign: 'center' },
   content: { paddingHorizontal: 16 },
-  title: { fontSize: 28, fontFamily: 'Inter_700Bold', marginBottom: 4 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  title: { fontSize: 28, fontFamily: 'Inter_700Bold' },
+  resetWeekBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
+  resetWeekBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalCard: { width: '100%', borderRadius: 20, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 },
+  modalIcon: { marginBottom: 12 },
+  modalTitle: { fontSize: 20, fontFamily: 'Inter_700Bold', marginBottom: 10, textAlign: 'center' },
+  modalMessage: { fontSize: 14, fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: 21, marginBottom: 24 },
+  modalActions: { flexDirection: 'row', gap: 12, width: '100%' },
+  modalBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
+  modalBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
   subtitle: { fontSize: 14, fontFamily: 'Inter_400Regular' },
   phasePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },

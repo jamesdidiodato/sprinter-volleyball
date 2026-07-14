@@ -941,6 +941,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/leagues/:id/reset-week", async (req: Request, res: Response) => {
+    try {
+      const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
+      if (!league) return res.status(404).json({ error: "League not found" });
+      const settings = (league.settings as LeagueSettings) || { playersPerTeam: 4, numTeams: 4, format: 'roundRobin' };
+      const isLadder = settings.format === 'ladder';
+      let players = [...(league.players as Player[])];
+
+      if (isLadder) {
+        const ladderWeek = league.currentWeek as LadderWeekData | null;
+        if (!ladderWeek) return res.status(400).json({ error: "No current week" });
+
+        const numCourts = Math.floor(ladderWeek.teams.length / 2);
+        for (const round of ladderWeek.rounds) {
+          for (const court of round.courts) {
+            if (!court.game.completed) continue;
+            const t1Score = court.game.team1Score ?? 0;
+            const t2Score = court.game.team2Score ?? 0;
+            const winnerId = t1Score > t2Score ? court.team1Id : court.team2Id;
+            const loserId = t1Score > t2Score ? court.team2Id : court.team1Id;
+            const roundNum = round.roundNumber;
+            const courtNum = court.courtNumber;
+            const winnerPts = roundNum <= 2 ? 2 : numCourts - courtNum + 1;
+            const loserPts = roundNum <= 2 ? 0 : (courtNum === 1 ? 1 : 0);
+            const winningTeam = ladderWeek.teams.find(t => t.id === winnerId);
+            const losingTeam = ladderWeek.teams.find(t => t.id === loserId);
+            if (winningTeam && losingTeam) {
+              const winnerIds = new Set(winningTeam.players.map(p => p.id));
+              const loserIds = new Set(losingTeam.players.map(p => p.id));
+              players = players.map(p => {
+                if (winnerIds.has(p.id)) return { ...p, seasonWins: Math.max(0, p.seasonWins - 1), seasonPoints: Math.max(0, (p.seasonPoints ?? 0) - winnerPts) };
+                if (loserIds.has(p.id)) return { ...p, seasonLosses: Math.max(0, p.seasonLosses - 1), seasonPoints: Math.max(0, (p.seasonPoints ?? 0) - loserPts) };
+                return p;
+              });
+            }
+          }
+        }
+
+        const round1 = ladderWeek.rounds[0];
+        const clearedRound1: LadderRound = {
+          ...round1,
+          completed: false,
+          courts: round1.courts.map(court => ({
+            ...court,
+            game: { ...court.game, team1Score: null, team2Score: null, completed: false },
+          })),
+        };
+        const teamPoints: Record<string, number> = {};
+        ladderWeek.teams.forEach(t => { teamPoints[t.id] = 0; });
+        const resetLadder: LadderWeekData = {
+          ...ladderWeek,
+          rounds: [clearedRound1],
+          currentRound: 1,
+          teamPoints,
+          phase: 'playing',
+        };
+        await storage.updateLeague(league.id, { currentWeek: resetLadder, players });
+        return res.json({ ladderWeek: resetLadder, players });
+      } else {
+        const currentWeek = league.currentWeek as WeekData | null;
+        if (!currentWeek) return res.status(400).json({ error: "No current week" });
+
+        for (const game of currentWeek.games) {
+          if (!game.completed) continue;
+          const winnerId = (game.team1Score ?? 0) > (game.team2Score ?? 0) ? game.team1Id : game.team2Id;
+          const loserId = (game.team1Score ?? 0) > (game.team2Score ?? 0) ? game.team2Id : game.team1Id;
+          const winningTeam = currentWeek.teams.find(t => t.id === winnerId);
+          const losingTeam = currentWeek.teams.find(t => t.id === loserId);
+          if (winningTeam && losingTeam) {
+            const winnerIds = new Set(winningTeam.players.map(p => p.id));
+            const loserIds = new Set(losingTeam.players.map(p => p.id));
+            players = players.map(p => {
+              if (winnerIds.has(p.id)) return { ...p, seasonWins: Math.max(0, p.seasonWins - 1) };
+              if (loserIds.has(p.id)) return { ...p, seasonLosses: Math.max(0, p.seasonLosses - 1) };
+              return p;
+            });
+          }
+        }
+
+        const resetWeek: WeekData = {
+          ...currentWeek,
+          games: currentWeek.games.map(g => ({ ...g, team1Score: null, team2Score: null, completed: false })),
+          semifinalGames: [],
+          finalGames: [],
+          phase: 'roundRobin',
+        };
+        await storage.updateLeague(league.id, { currentWeek: resetWeek, players });
+        return res.json({ currentWeek: resetWeek, players });
+      }
+    } catch (e: any) {
+      console.error("Reset week error:", e);
+      return res.status(500).json({ error: "Failed to reset week" });
+    }
+  });
+
   app.post("/api/leagues/:id/reset", async (req: Request, res: Response) => {
     try {
       const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));

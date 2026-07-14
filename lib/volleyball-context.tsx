@@ -106,6 +106,7 @@ interface VolleyballContextValue {
   undoLadderScore: (roundNumber: number, courtNumber: number) => void;
   advanceLadderRound: () => void;
   resetSeason: () => void;
+  resetCurrentWeek: () => void;
   updateVideoUrl: (weekNumber: number, videoUrl: string | null) => void;
   getTeamRankings: () => Array<{ team: Team; totalPoints: number; totalPointsAllowed: number; pointDifferential: number; wins: number; losses: number; rank: number }>;
   getPlayerStandings: () => Player[];
@@ -388,6 +389,23 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     }
   }, [league]);
 
+  const resetCurrentWeek = useCallback(async () => {
+    if (!league) return;
+    try {
+      const res = await apiRequest('POST', `/api/leagues/${league.id}/reset-week`);
+      const data = await res.json();
+      setPlayers(data.players);
+      if (data.ladderWeek) {
+        setLadderWeek(data.ladderWeek);
+      } else {
+        setCurrentWeek(data.currentWeek);
+        setLadderWeek(null);
+      }
+    } catch (e) {
+      console.error('Reset week error:', e);
+    }
+  }, [league]);
+
   const updateVideoUrl = useCallback(async (weekNumber: number, videoUrl: string | null) => {
     if (!league) return;
     try {
@@ -441,6 +459,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     undoLadderScore,
     advanceLadderRound,
     resetSeason,
+    resetCurrentWeek,
     updateVideoUrl,
     getTeamRankings,
     getPlayerStandings,
@@ -448,7 +467,7 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
     joinLeague,
     leaveLeague,
     refreshData,
-  }), [players, currentWeek, ladderWeek, history, isLoading, league, settings, updatePlayerName, generateNewWeek, swapPlayers, swapLadderCourtTeams, submitScore, undoScore, submitLadderScore, undoLadderScore, advanceLadderRound, resetSeason, updateVideoUrl, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
+  }), [players, currentWeek, ladderWeek, history, isLoading, league, settings, updatePlayerName, generateNewWeek, swapPlayers, swapLadderCourtTeams, submitScore, undoScore, submitLadderScore, undoLadderScore, advanceLadderRound, resetSeason, resetCurrentWeek, updateVideoUrl, getTeamRankings, getPlayerStandings, createLeague, joinLeague, leaveLeague, refreshData]);
 
   return (
     <VolleyballContext.Provider value={value}>
