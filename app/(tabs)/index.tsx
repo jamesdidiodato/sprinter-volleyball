@@ -107,7 +107,7 @@ export default function PlayersScreen() {
   const filtered = filter === 'All' ? players : players.filter(p => p.position === filter);
 
   const allPositions = Array.from(new Set(players.map(p => p.position)));
-  const positions: Array<string> = ['All', ...allPositions];
+  const positions: Array<Position | 'All'> = ['All', ...allPositions];
 
   const handleLeave = () => {
     leaveLeague();

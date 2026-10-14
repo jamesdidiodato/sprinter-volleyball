@@ -432,12 +432,16 @@ export function VolleyballProvider({ children }: { children: ReactNode }) {
         if (bPts !== aPts) return bPts - aPts;
         return b.seasonWins - a.seasonWins;
       }
+      const aPoints = a.seasonPoints ?? 0;
+      const bPoints = b.seasonPoints ?? 0;
+      if (bPoints !== aPoints) return bPoints - aPoints;
+      if (b.seasonWins !== a.seasonWins) return b.seasonWins - a.seasonWins;
       const aTotal = a.seasonWins + a.seasonLosses;
       const bTotal = b.seasonWins + b.seasonLosses;
       const aWinPct = aTotal > 0 ? a.seasonWins / aTotal : 0;
       const bWinPct = bTotal > 0 ? b.seasonWins / bTotal : 0;
       if (bWinPct !== aWinPct) return bWinPct - aWinPct;
-      return b.seasonWins - a.seasonWins;
+      return a.name.localeCompare(b.name);
     });
   }, [players, settings.format]);
 

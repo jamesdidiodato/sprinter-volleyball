@@ -61,6 +61,74 @@ interface LadderRound {
   completed: boolean;
 }
 
+interface SeasonWeekData {
+  teams?: Team[];
+  games?: Game[];
+  semifinalGames?: Game[];
+  finalGames?: Game[];
+}
+
+export function recalculateRoundRobinSeasonStats(
+  players: Player[],
+  history: SeasonWeekData[],
+  currentWeek: SeasonWeekData | null,
+): Player[] {
+  const stats = new Map(players.map(player => [
+    player.id,
+    { wins: 0, losses: 0, points: 0 },
+  ]));
+  const weeks = [...history, ...(currentWeek ? [currentWeek] : [])];
+
+  for (const week of weeks) {
+    const teams = Array.isArray(week.teams) ? week.teams : [];
+    const roundRobinGames = Array.isArray(week.games) ? week.games : [];
+    const semifinalGames = Array.isArray(week.semifinalGames) ? week.semifinalGames : [];
+    const finalGames = Array.isArray(week.finalGames) ? week.finalGames : [];
+    const games = [...roundRobinGames, ...semifinalGames, ...finalGames];
+
+    for (const game of games) {
+      if (!game.completed || game.team1Score == null || game.team2Score == null) continue;
+
+      const team1Won = game.team1Score > game.team2Score;
+      const winnerId = team1Won ? game.team1Id : game.team2Id;
+      const loserId = team1Won ? game.team2Id : game.team1Id;
+      const winningTeam = teams.find(team => team.id === winnerId);
+      const losingTeam = teams.find(team => team.id === loserId);
+      if (!winningTeam || !losingTeam) continue;
+
+      const isChampionship = game.round === 'final'
+        && (game.label?.startsWith('Championship:') || finalGames[0]?.id === game.id);
+      const winnerPoints = isChampionship ? 2 : 1;
+      const loserPoints = isChampionship ? 1 : 0;
+
+      for (const player of winningTeam.players) {
+        const playerStats = stats.get(player.id);
+        if (playerStats) {
+          playerStats.wins += 1;
+          playerStats.points += winnerPoints;
+        }
+      }
+      for (const player of losingTeam.players) {
+        const playerStats = stats.get(player.id);
+        if (playerStats) {
+          playerStats.losses += 1;
+          playerStats.points += loserPoints;
+        }
+      }
+    }
+  }
+
+  return players.map(player => {
+    const playerStats = stats.get(player.id)!;
+    return {
+      ...player,
+      seasonWins: playerStats.wins,
+      seasonLosses: playerStats.losses,
+      seasonPoints: playerStats.points,
+    };
+  });
+}
+
 interface LadderWeekData {
   teams: Team[];
   rounds: LadderRound[];
@@ -356,12 +424,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       storage.touchLeague(leagueId).catch(() => {});
       const leagueSettings = (league.settings as LeagueSettings) || { playersPerTeam: 4, numTeams: 4, format: 'roundRobin' };
       const isLadder = leagueSettings.format === 'ladder';
+      const currentWeek = isLadder ? null : league.currentWeek as WeekData | null;
+      const players = isLadder
+        ? league.players
+        : recalculateRoundRobinSeasonStats(
+          league.players as Player[],
+          (league.history as SeasonWeekData[]) || [],
+          currentWeek,
+        );
       return res.json({
         id: league.id,
         name: league.name,
         joinCode: league.joinCode,
-        players: league.players,
-        currentWeek: isLadder ? null : league.currentWeek,
+        players,
+        currentWeek,
         ladderWeek: isLadder ? league.currentWeek : null,
         history: league.history,
         settings: leagueSettings,
@@ -586,7 +662,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const league = await storage.getLeague(parseInt(getParamId(req.params, 'id')));
       if (!league) return res.status(404).json({ error: "League not found" });
-      const settings = (league.settings as LeagueSettings) || { playersPerTeam: 4, numTeams: 4 };
+      const settings = (league.settings as LeagueSettings) || { playersPerTeam: 4, numTeams: 4, format: 'roundRobin' };
       const currentWeek = league.currentWeek as WeekData | null;
       if (!currentWeek) return res.status(400).json({ error: "No current week" });
 
@@ -605,31 +681,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let updatedWeek = { ...currentWeek };
       let players = [...(league.players as Player[])];
 
-      const applyWinLoss = (winnerId: string, loserId: string) => {
-        const winningTeam = currentWeek.teams.find(t => t.id === winnerId);
-        const losingTeam = currentWeek.teams.find(t => t.id === loserId);
-        if (winningTeam && losingTeam) {
-          const winnerIds = new Set(winningTeam.players.map(p => p.id));
-          const loserIds = new Set(losingTeam.players.map(p => p.id));
-          players = players.map(p => {
-            if (winnerIds.has(p.id)) return { ...p, seasonWins: p.seasonWins + 1 };
-            if (loserIds.has(p.id)) return { ...p, seasonLosses: p.seasonLosses + 1 };
-            return p;
-          });
-        }
-      };
-
       if (round === 'roundRobin') {
         const existingGame = currentWeek.games.find(g => g.id === gameId);
         if (!existingGame) return res.status(400).json({ error: "Game not found" });
-        const alreadyScored = existingGame.completed;
         updatedWeek.games = currentWeek.games.map(g =>
           g.id === gameId ? { ...g, team1Score, team2Score, completed: true } : g
         );
-        const game = updatedWeek.games.find(g => g.id === gameId)!;
-        const winnerId = team1Score > team2Score ? game.team1Id : game.team2Id;
-        const loserId = team1Score > team2Score ? game.team2Id : game.team1Id;
-        if (!alreadyScored) applyWinLoss(winnerId, loserId);
         if (updatedWeek.games.every(g => g.completed)) {
           if (hasSemifinals(settings.numTeams)) {
             updatedWeek.semifinalGames = generateSemifinals(updatedWeek);
@@ -655,6 +712,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      players = recalculateRoundRobinSeasonStats(
+        players,
+        (league.history as SeasonWeekData[]) || [],
+        updatedWeek,
+      );
       await storage.updateLeague(league.id, { currentWeek: updatedWeek, players });
       return res.json({ currentWeek: updatedWeek, players });
     } catch (e: any) {
@@ -675,27 +737,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let updatedWeek = { ...currentWeek };
       let players = [...(league.players as Player[])];
 
-      const reverseWinLoss = (game: Game) => {
-        if (!game.completed) return;
-        const winnerId = (game.team1Score ?? 0) > (game.team2Score ?? 0) ? game.team1Id : game.team2Id;
-        const loserId = (game.team1Score ?? 0) > (game.team2Score ?? 0) ? game.team2Id : game.team1Id;
-        const winningTeam = currentWeek.teams.find(t => t.id === winnerId);
-        const losingTeam = currentWeek.teams.find(t => t.id === loserId);
-        if (winningTeam && losingTeam) {
-          const winnerIds = new Set(winningTeam.players.map(p => p.id));
-          const loserIds = new Set(losingTeam.players.map(p => p.id));
-          players = players.map(p => {
-            if (winnerIds.has(p.id)) return { ...p, seasonWins: Math.max(0, p.seasonWins - 1) };
-            if (loserIds.has(p.id)) return { ...p, seasonLosses: Math.max(0, p.seasonLosses - 1) };
-            return p;
-          });
-        }
-      };
-
       if (round === 'roundRobin') {
         const game = currentWeek.games.find(g => g.id === gameId);
         if (!game || !game.completed) return res.status(400).json({ error: "Game not found or not completed" });
-        reverseWinLoss(game);
         updatedWeek.games = currentWeek.games.map(g =>
           g.id === gameId ? { ...g, team1Score: null, team2Score: null, completed: false } : g
         );
@@ -725,6 +769,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      players = recalculateRoundRobinSeasonStats(
+        players,
+        (league.history as SeasonWeekData[]) || [],
+        updatedWeek,
+      );
       await storage.updateLeague(league.id, { currentWeek: updatedWeek, players });
       return res.json({ currentWeek: updatedWeek, players });
     } catch (e: any) {
@@ -1003,23 +1052,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const currentWeek = league.currentWeek as WeekData | null;
         if (!currentWeek) return res.status(400).json({ error: "No current week" });
 
-        for (const game of currentWeek.games) {
-          if (!game.completed) continue;
-          const winnerId = (game.team1Score ?? 0) > (game.team2Score ?? 0) ? game.team1Id : game.team2Id;
-          const loserId = (game.team1Score ?? 0) > (game.team2Score ?? 0) ? game.team2Id : game.team1Id;
-          const winningTeam = currentWeek.teams.find(t => t.id === winnerId);
-          const losingTeam = currentWeek.teams.find(t => t.id === loserId);
-          if (winningTeam && losingTeam) {
-            const winnerIds = new Set(winningTeam.players.map(p => p.id));
-            const loserIds = new Set(losingTeam.players.map(p => p.id));
-            players = players.map(p => {
-              if (winnerIds.has(p.id)) return { ...p, seasonWins: Math.max(0, p.seasonWins - 1) };
-              if (loserIds.has(p.id)) return { ...p, seasonLosses: Math.max(0, p.seasonLosses - 1) };
-              return p;
-            });
-          }
-        }
-
         const resetWeek: WeekData = {
           ...currentWeek,
           games: currentWeek.games.map(g => ({ ...g, team1Score: null, team2Score: null, completed: false })),
@@ -1027,6 +1059,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           finalGames: [],
           phase: 'roundRobin',
         };
+        players = recalculateRoundRobinSeasonStats(
+          players,
+          (league.history as SeasonWeekData[]) || [],
+          resetWeek,
+        );
         await storage.updateLeague(league.id, { currentWeek: resetWeek, players });
         return res.json({ currentWeek: resetWeek, players });
       }

@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import Colors from '@/constants/colors';
 import { useVolleyball, Player, LadderWeekData, getTeamDisplayName } from '@/lib/volleyball-context';
@@ -73,7 +73,11 @@ export default function StandingsScreen() {
     }
 
     try {
-      const fileUri = FileSystem.documentDirectory + 'volleyball_standings.csv';
+      const documentDirectory = FileSystem.documentDirectory;
+      if (!documentDirectory) {
+        throw new Error('Document storage is unavailable on this device.');
+      }
+      const fileUri = documentDirectory + 'volleyball_standings.csv';
       await FileSystem.writeAsStringAsync(fileUri, csv);
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
@@ -107,6 +111,11 @@ export default function StandingsScreen() {
   const renderHeader = () => (
     <View style={styles.headerContent}>
       <Text style={[styles.title, { color: theme.text }]}>Season Standings</Text>
+      {settings.format === 'roundRobin' && (
+        <Text style={[styles.standingsRules, { color: theme.textSecondary }]}>
+          All matches count toward wins and losses. Round robin and semifinals: 1 point for a win. Championship: 2 points for a win, 1 for a loss. 3rd-place match: 1 point for a win.
+        </Text>
+      )}
 
       <View style={styles.actionRow}>
         <Pressable
@@ -258,6 +267,7 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: 16, paddingBottom: 120 },
   headerContent: { marginBottom: 8 },
   title: { fontSize: 28, fontFamily: 'Inter_700Bold', marginBottom: 16 },
+  standingsRules: { fontSize: 13, lineHeight: 18, marginTop: -8, marginBottom: 16 },
   actionRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   actionBtn: {
     flexDirection: 'row',

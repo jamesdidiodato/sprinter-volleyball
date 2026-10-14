@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,12 +10,31 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useVolleyball, LeagueFormat } from '@/lib/volleyball-context';
+
+type FavoriteLeague = { name: string; joinCode: string };
+
+const FAVORITES_KEY = 'vb_favorite_leagues';
+const emptyFavorites = (): FavoriteLeague[] =>
+  Array.from({ length: 3 }, () => ({ name: '', joinCode: '' }));
+
+function normalizeFavorites(value: unknown): FavoriteLeague[] {
+  const favorites = Array.isArray(value) ? value : [];
+  return Array.from({ length: 3 }, (_, index) => {
+    const favorite = favorites[index];
+    return {
+      name: typeof favorite?.name === 'string' ? favorite.name : '',
+      joinCode: typeof favorite?.joinCode === 'string' ? favorite.joinCode.toUpperCase() : '',
+    };
+  });
+}
 
 function NumberStepper({
   label,
@@ -100,8 +119,69 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [favorites, setFavorites] = useState<FavoriteLeague[]>(emptyFavorites);
+  const [favoriteDraft, setFavoriteDraft] = useState<FavoriteLeague[]>(emptyFavorites);
+  const [showFavoritesEditor, setShowFavoritesEditor] = useState(false);
+  const [favoriteEditorError, setFavoriteEditorError] = useState('');
+  const [favoriteLoadingIndex, setFavoriteLoadingIndex] = useState<number | null>(null);
 
   const totalPlayers = playersPerTeam * numTeams;
+
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(FAVORITES_KEY)
+      .then(stored => {
+        if (active && stored) setFavorites(normalizeFavorites(JSON.parse(stored)));
+      })
+      .catch(e => console.error('Failed to load favorite leagues:', e));
+    return () => { active = false; };
+  }, []);
+
+  const openFavoritesEditor = () => {
+    setFavoriteDraft(favorites.map(favorite => ({ ...favorite })));
+    setFavoriteEditorError('');
+    setShowFavoritesEditor(true);
+  };
+
+  const updateFavoriteDraft = (index: number, field: keyof FavoriteLeague, value: string) => {
+    setFavoriteDraft(current => current.map((favorite, i) => (
+      i === index
+        ? { ...favorite, [field]: field === 'joinCode' ? value.toUpperCase() : value }
+        : favorite
+    )));
+    setFavoriteEditorError('');
+  };
+
+  const clearFavoriteDraft = (index: number) => {
+    setFavoriteDraft(current => current.map((favorite, i) => (
+      i === index ? { name: '', joinCode: '' } : favorite
+    )));
+    setFavoriteEditorError('');
+  };
+
+  const saveFavorites = async () => {
+    const normalized = normalizeFavorites(favoriteDraft).map(favorite => ({
+      name: favorite.name.trim(),
+      joinCode: favorite.joinCode.trim().toUpperCase(),
+    }));
+    const hasIncompleteFavorite = normalized.some(favorite =>
+      Boolean(favorite.name) !== Boolean(favorite.joinCode)
+    );
+    if (hasIncompleteFavorite) {
+      setFavoriteEditorError('Enter both a league name and join code for each favorite, or clear the slot.');
+      return;
+    }
+
+    try {
+      await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(normalized));
+      setFavorites(normalized);
+      setShowFavoritesEditor(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      console.error('Failed to save favorite leagues:', e);
+      setFavoriteEditorError('Could not save favorites. Please try again.');
+    }
+  };
 
   const handleCreate = async () => {
     if (!leagueName.trim()) {
@@ -143,6 +223,31 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleJoinFavorite = async (favorite: FavoriteLeague, index: number) => {
+    if (!favorite.name.trim() || !favorite.joinCode.trim()) {
+      openFavoritesEditor();
+      return;
+    }
+
+    setLoading(true);
+    setFavoriteLoadingIndex(index);
+    setError('');
+    try {
+      await joinLeague(favorite.joinCode.trim());
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      const msg = e?.message || '';
+      if (msg.includes('404')) {
+        setError(`Could not find ${favorite.name}. Check its saved join code.`);
+      } else {
+        setError(`Failed to join ${favorite.name}. Please try again.`);
+      }
+    } finally {
+      setLoading(false);
+      setFavoriteLoadingIndex(null);
     }
   };
 
@@ -190,7 +295,7 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
               </View>
               <Text style={[styles.optionTitle, { color: theme.text }]}>Join a League</Text>
               <Text style={[styles.optionDesc, { color: theme.textSecondary }]}>
-                Enter a code from your league organizer to join an existing league
+                Enter a join code, or pick one of your saved favorites
               </Text>
             </Pressable>
           </View>
@@ -243,7 +348,7 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
           <Text style={[styles.formSubtitle, { color: theme.textSecondary }]}>
             {mode === 'create'
               ? 'Set up your league with a name and team configuration.'
-              : 'Enter the join code you received from your league organizer.'}
+              : 'Enter your organizer’s join code, or choose a saved league below.'}
           </Text>
 
           <View style={styles.formContainer}>
@@ -334,17 +439,71 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
                 )}
               </>
             ) : (
-              <TextInput
-                style={[styles.input, styles.codeInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]}
-                value={joinCode}
-                onChangeText={t => setJoinCode(t.toUpperCase())}
-                placeholder="e.g. SPRNT4K2X"
-                placeholderTextColor={theme.textSecondary}
-                autoCapitalize="characters"
-                autoFocus
-                returnKeyType="done"
-                onSubmitEditing={handleJoin}
-              />
+              <>
+                <TextInput
+                  style={[styles.input, styles.codeInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]}
+                  value={joinCode}
+                  onChangeText={t => setJoinCode(t.toUpperCase())}
+                  placeholder="League join code"
+                  placeholderTextColor={theme.textSecondary}
+                  autoCapitalize="characters"
+                  returnKeyType="done"
+                  onSubmitEditing={handleJoin}
+                  accessibilityLabel="League join code"
+                />
+
+                <View style={styles.favoriteSection}>
+                  <View style={styles.favoriteHeadingRow}>
+                    <Text style={[styles.favoriteHeading, { color: theme.text }]}>My Favorites</Text>
+                    <Pressable
+                      onPress={openFavoritesEditor}
+                      accessibilityRole="button"
+                      accessibilityLabel="Edit favorite leagues"
+                      style={({ pressed }) => [styles.editFavoritesBtn, { opacity: pressed ? 0.7 : 1 }]}
+                    >
+                      <Ionicons name="pencil" size={15} color={theme.tint} />
+                      <Text style={[styles.editFavoritesText, { color: theme.tint }]}>Edit favorites</Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.favoritesRow}>
+                    {favorites.map((favorite, index) => {
+                      const isSet = Boolean(favorite.name.trim() && favorite.joinCode.trim());
+                      const isJoining = favoriteLoadingIndex === index;
+                      return (
+                        <Pressable
+                          key={index}
+                          onPress={() => handleJoinFavorite(favorite, index)}
+                          disabled={loading}
+                          accessibilityRole="button"
+                          accessibilityLabel={isSet ? `Join ${favorite.name}` : `Set favorite ${index + 1}`}
+                          style={({ pressed }) => [
+                            styles.favoriteCard,
+                            {
+                              backgroundColor: theme.card,
+                              borderColor: isSet ? theme.tint + '55' : theme.border,
+                              opacity: pressed || (loading && !isJoining) ? 0.72 : 1,
+                            },
+                          ]}
+                        >
+                          <View style={[styles.favoriteIcon, { backgroundColor: theme.tint + '18' }]}>
+                            {isJoining ? (
+                              <ActivityIndicator size="small" color={theme.tint} />
+                            ) : (
+                              <Ionicons name={isSet ? 'star' : 'add'} size={20} color={theme.tint} />
+                            )}
+                          </View>
+                          <Text
+                            style={[styles.favoriteName, { color: isSet ? theme.text : theme.textSecondary }]}
+                            numberOfLines={1}
+                          >
+                            {isSet ? favorite.name : `Favorite ${index + 1}`}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              </>
             )}
 
             {!!error && (
@@ -376,6 +535,109 @@ export default function LeagueScreen({ onOpenAdmin }: { onOpenAdmin?: () => void
           </View>
         </ScrollView>
       </View>
+      <Modal
+        visible={showFavoritesEditor}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFavoritesEditor(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalKeyboard}
+          >
+            <View style={[styles.favoriteModal, { backgroundColor: theme.card }]}>
+              <View style={styles.modalTitleRow}>
+                <View style={styles.modalHeading}>
+                  <Text style={[styles.modalTitle, { color: theme.text }]}>Edit Favorites</Text>
+                  <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+                    Save up to three leagues for quick joining.
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => setShowFavoritesEditor(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close favorites editor"
+                  hitSlop={10}
+                >
+                  <Ionicons name="close" size={24} color={theme.textSecondary} />
+                </Pressable>
+              </View>
+              <ScrollView
+                style={styles.favoriteDraftList}
+                contentContainerStyle={styles.favoriteDraftContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {favoriteDraft.map((favorite, index) => (
+                  <View
+                    key={index}
+                    style={[styles.favoriteDraftCard, { borderColor: theme.border, backgroundColor: theme.background }]}
+                  >
+                    <View style={styles.favoriteDraftHeading}>
+                      <Text style={[styles.favoriteDraftLabel, { color: theme.text }]}>Favorite {index + 1}</Text>
+                      <Pressable
+                        onPress={() => clearFavoriteDraft(index)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Clear favorite ${index + 1}`}
+                        hitSlop={8}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={theme.error} />
+                      </Pressable>
+                    </View>
+                    <TextInput
+                      style={[styles.favoriteInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]}
+                      value={favorite.name}
+                      onChangeText={value => updateFavoriteDraft(index, 'name', value)}
+                      placeholder="League name"
+                      placeholderTextColor={theme.textSecondary}
+                      returnKeyType="next"
+                      accessibilityLabel={`Favorite ${index + 1} league name`}
+                    />
+                    <TextInput
+                      style={[styles.favoriteInput, styles.favoriteCodeInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]}
+                      value={favorite.joinCode}
+                      onChangeText={value => updateFavoriteDraft(index, 'joinCode', value)}
+                      placeholder="Join code"
+                      placeholderTextColor={theme.textSecondary}
+                      autoCapitalize="characters"
+                      returnKeyType="done"
+                      accessibilityLabel={`Favorite ${index + 1} join code`}
+                    />
+                  </View>
+                ))}
+                {!!favoriteEditorError && (
+                  <View style={styles.errorRow}>
+                    <Ionicons name="alert-circle" size={16} color={theme.error} />
+                    <Text style={[styles.errorText, { color: theme.error }]}>{favoriteEditorError}</Text>
+                  </View>
+                )}
+              </ScrollView>
+              <View style={styles.favoriteModalActions}>
+                <Pressable
+                  onPress={() => setShowFavoritesEditor(false)}
+                  style={({ pressed }) => [
+                    styles.favoriteModalBtn,
+                    { backgroundColor: theme.background, opacity: pressed ? 0.75 : 1 },
+                  ]}
+                >
+                  <Text style={[styles.favoriteModalBtnText, { color: theme.text }]}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={saveFavorites}
+                  style={({ pressed }) => [
+                    styles.favoriteModalBtn,
+                    styles.saveFavoritesBtn,
+                    { backgroundColor: theme.tint, opacity: pressed ? 0.8 : 1 },
+                  ]}
+                >
+                  <Text style={[styles.favoriteModalBtnText, { color: '#FFF' }]}>Save favorites</Text>
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -454,6 +716,55 @@ const styles = StyleSheet.create({
   },
   formatOptionTitle: { fontSize: 15, fontFamily: 'Inter_700Bold' },
   formatOptionDesc: { fontSize: 12, fontFamily: 'Inter_400Regular', lineHeight: 17 },
+  favoriteSection: { gap: 10 },
+  favoriteHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  favoriteHeading: { fontSize: 15, fontFamily: 'Inter_700Bold' },
+  editFavoritesBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
+  editFavoritesText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  favoritesRow: { flexDirection: 'row', gap: 8 },
+  favoriteCard: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    gap: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 5,
+  },
+  favoriteIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  favoriteName: { width: '100%', fontSize: 11, lineHeight: 14, fontFamily: 'Inter_600SemiBold', textAlign: 'center' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.48)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalKeyboard: { width: '100%', maxWidth: 440, maxHeight: '92%' },
+  favoriteModal: { borderRadius: 18, padding: 20, maxHeight: '100%' },
+  modalTitleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 },
+  modalHeading: { flex: 1 },
+  modalTitle: { fontSize: 21, fontFamily: 'Inter_700Bold' },
+  modalSubtitle: { fontSize: 13, lineHeight: 18, fontFamily: 'Inter_400Regular', marginTop: 4 },
+  favoriteDraftList: { flexShrink: 1 },
+  favoriteDraftContent: { gap: 10, paddingBottom: 10 },
+  favoriteDraftCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 9 },
+  favoriteDraftHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  favoriteDraftLabel: { fontSize: 14, fontFamily: 'Inter_700Bold' },
+  favoriteInput: {
+    borderWidth: 1,
+    borderRadius: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontFamily: 'Inter_400Regular',
+  },
+  favoriteCodeInput: { textTransform: 'uppercase', letterSpacing: 1 },
+  favoriteModalActions: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  favoriteModalBtn: { flex: 1, minHeight: 46, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  saveFavoritesBtn: { flex: 1.3 },
+  favoriteModalBtnText: { fontSize: 14, fontFamily: 'Inter_700Bold' },
   adminBtn: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,0 +1,1 @@
+- [Metro workspace watcher](metro-local-watch.md) — keep transient Replit `.local` files out of Metro's file map to prevent watcher ENOENT crashes.
